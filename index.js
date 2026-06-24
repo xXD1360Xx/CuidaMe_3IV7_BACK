@@ -56,7 +56,7 @@ import rutasMedicinas from './rutas/rutasMedicinas.js';
 import rutasCalendario from './rutas/rutasCalendario.js'; // Cambiado de rutasEventos
 import rutasFamilia from './rutas/rutasFamilia.js';
 import rutasHorario from './rutas/rutasHorario.js'; // Nueva ruta para horario
-import rutasInfoAdulto from './rutas/rutasInfoAdulto.js'; // Nueva ruta para info adulto
+import rutasInfoAnciano from './rutas/rutasInfoAnciano.js'; // Nueva ruta para info adulto
 import rutasPreferencias from './rutas/rutasPreferencias.js'; // Nueva ruta para preferencias
 
 console.log('✅ Todas las rutas importadas correctamente');
@@ -343,7 +343,7 @@ app.use('/api/auth', rutasAutenticacion);
 console.log('✅ Rutas montadas en /api/auth');
 
 // Información del adulto mayor
-app.use('/api/info-adulto', rutasInfoAdulto);
+app.use('/api/info-adulto', rutasInfoAnciano);
 console.log('✅ Rutas montadas en /api/info-adulto');
 
 // Medicinas
