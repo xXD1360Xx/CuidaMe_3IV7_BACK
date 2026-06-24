@@ -8,9 +8,9 @@ import path from 'path';
 console.log('⚡ CLOUDINARY.JS: Inicializando...');
 
 // Obtener variables de Northflank
-const cloudName = 'du8hxf6x2';
-const apiKey = '257271384387732';
-const apiSecret = '-noe5puA9PnU_faxE2ZMbG2annA';
+const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+const apiKey = process.env.CLOUDINARY_API_KEY;
+const apiSecret = process.env.CLOUDINARY_API_SECRET;
 
 console.log('🔍 Variables de entorno:');
 console.log(`- CLOUDINARY_CLOUD_NAME: ${cloudName ? '✅ PRESENTE' : '❌ NO ENCONTRADO'}`);
@@ -48,7 +48,7 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage,
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
@@ -65,34 +65,34 @@ const upload = multer({
 const subirACloudinary = async (filePath, tipo = 'avatar') => {
   try {
     console.log(`📤 Subiendo ${tipo}: ${filePath}`);
-    
+
     // Verificar archivo
     if (!fs.existsSync(filePath)) {
       throw new Error('Archivo no encontrado');
     }
-    
+
     // Configuración según tipo
     const folder = tipo === 'avatar' ? 'perfiles/avatars' : 'perfiles/banners';
-    const transformation = tipo === 'avatar' 
+    const transformation = tipo === 'avatar'
       ? [{ width: 500, height: 500, crop: 'fill' }]
       : [{ width: 1200, height: 400, crop: 'fill' }];
-    
+
     // Subir a Cloudinary
     const resultado = await cloudinary.uploader.upload(filePath, {
       folder,
       transformation,
       resource_type: 'image'
     });
-    
+
     console.log(`✅ Subido exitosamente: ${resultado.secure_url}`);
-    
+
     // Eliminar archivo temporal
     try {
       await unlinkAsync(filePath);
     } catch (error) {
       console.warn('⚠️ No se pudo eliminar archivo temporal');
     }
-    
+
     return {
       exito: true,
       url: resultado.secure_url,
@@ -100,10 +100,10 @@ const subirACloudinary = async (filePath, tipo = 'avatar') => {
       width: resultado.width,
       height: resultado.height
     };
-    
+
   } catch (error) {
     console.error(`❌ Error subiendo ${tipo}:`, error.message);
-    
+
     // Intentar limpiar archivo temporal
     try {
       if (fs.existsSync(filePath)) {
@@ -112,7 +112,7 @@ const subirACloudinary = async (filePath, tipo = 'avatar') => {
     } catch (cleanupError) {
       // Ignorar error de limpieza
     }
-    
+
     throw error;
   }
 };
@@ -131,15 +131,15 @@ const eliminarDeCloudinary = async (publicId) => {
 // ========== FUNCIÓN PARA EXTRAER PUBLIC_ID ==========
 const extraerPublicId = (url) => {
   if (!url || !url.includes('cloudinary.com')) return null;
-  
+
   try {
     const partes = url.split('/upload/');
     if (partes.length < 2) return null;
-    
+
     const pathConExtension = partes[1];
     const pathSinExtension = pathConExtension.split('.')[0];
     const partesPath = pathSinExtension.split('/');
-    
+
     // Remover versión (v123456...)
     return partesPath.filter(part => !part.startsWith('v')).join('/');
   } catch (error) {
@@ -148,10 +148,10 @@ const extraerPublicId = (url) => {
 };
 
 // ========== EXPORTAR ==========
-export { 
-  cloudinary, 
-  upload, 
-  subirACloudinary, 
-  eliminarDeCloudinary, 
-  extraerPublicId 
+export {
+  cloudinary,
+  upload,
+  subirACloudinary,
+  eliminarDeCloudinary,
+  extraerPublicId
 };

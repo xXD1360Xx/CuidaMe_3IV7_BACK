@@ -15,20 +15,15 @@ if (!DATABASE_URL) {
 const parseDatabaseUrl = (url) => {
   try {
     const parsed = new URL(url);
-    
-    // Extraer hostname completo (sin puerto)
-    let host = parsed.hostname;
-    // Asegurar el subdominio correcto para Render.com
-    host = `${host}.oregon-postgres.render.com`;
-    
+
     return {
-      host: host,
+      host: parsed.hostname,
       port: 5432,
       database: parsed.pathname?.substring(1),
       user: parsed.username,
       password: parsed.password
     };
-    
+
   } catch (error) {
     console.error('❌ Error parseando DATABASE_URL:', error.message);
     return null;
@@ -79,12 +74,12 @@ pool.on('error', (err) => {
  * Verificación BÁSICA de conexión
  * @returns {Promise<Object>} Resultado de la verificación básica
  */
-export const verificarConexionDB = async () => {
+export const verificarConexionDB = async (intentos = 1) => {
   let client;
-  
+
   try {
     client = await pool.connect();
-    
+
     // Verificación básica únicamente
     const result = await client.query(`
       SELECT 
@@ -94,12 +89,12 @@ export const verificarConexionDB = async () => {
         current_user as db_user,
         inet_server_addr() as server_ip
     `);
-    
+
     console.log('✅ Conexión PostgreSQL exitosa');
     console.log(`   Database: ${result.rows[0].db_name}`);
     console.log(`   PostgreSQL: ${result.rows[0].pg_version.split(',')[0]}`);
     console.log(`   Hora servidor: ${result.rows[0].server_time}`);
-    
+
     return {
       success: true,
       connected: true,
@@ -109,13 +104,13 @@ export const verificarConexionDB = async () => {
       version: result.rows[0].pg_version,
       server_ip: result.rows[0].server_ip
     };
-    
+
   } catch (error) {
     console.error('❌ Error conectando a PostgreSQL:', error.message);
-    
+
     // Información detallada para debugging
     console.error(`   Código error: ${error.code}`);
-    
+
     if (error.code === 'ECONNREFUSED') {
       console.error('   ⚠️ El servidor PostgreSQL rechazó la conexión');
     } else if (error.code === 'ENOTFOUND') {
@@ -126,7 +121,7 @@ export const verificarConexionDB = async () => {
     } else if (error.code === '3D000') {
       console.error('   ⚠️ Base de datos no existe');
     }
-    
+
     return {
       success: false,
       connected: false,
@@ -146,10 +141,10 @@ export const verificarConexionDB = async () => {
  */
 export const obtenerEstructuraCompletaDB = async () => {
   let client;
-  
+
   try {
     client = await pool.connect();
-    
+
     // 1. Obtener TODAS las tablas
     const tablas = await client.query(`
       SELECT 
@@ -163,9 +158,9 @@ export const obtenerEstructuraCompletaDB = async () => {
       WHERE table_schema = 'public'
       ORDER BY table_name
     `);
-    
+
     console.log(`📊 Total tablas encontradas: ${tablas.rows.length}`);
-    
+
     // 2. Para cada tabla, obtener sus columnas DETALLADAS
     const tablasConDetalles = await Promise.all(
       tablas.rows.map(async (tabla) => {
@@ -182,7 +177,7 @@ export const obtenerEstructuraCompletaDB = async () => {
             AND table_name = $1
           ORDER BY ordinal_position
         `, [tabla.table_name]);
-        
+
         // Formatear columnas
         const columnasFormateadas = columnas.rows.map(col => ({
           nombre: col.column_name,
@@ -191,7 +186,7 @@ export const obtenerEstructuraCompletaDB = async () => {
           valor_default: col.column_default || 'Ninguno',
           posicion: col.ordinal_position
         }));
-        
+
         return {
           nombre: tabla.table_name,
           tipo: tabla.table_type,
@@ -200,10 +195,10 @@ export const obtenerEstructuraCompletaDB = async () => {
         };
       })
     );
-    
+
     // 3. Mostrar información detallada de cada tabla
     console.log('\n📋 ===== LISTA COMPLETA DE TABLAS =====');
-    
+
     tablasConDetalles.forEach((tabla, index) => {
       console.log(`\n${index + 1}. ${tabla.nombre} (${tabla.tipo}, ${tabla.total_columnas} columnas)`);
       console.log('   Columnas:');
@@ -211,7 +206,7 @@ export const obtenerEstructuraCompletaDB = async () => {
         console.log(`     ${col.posicion}. ${col.nombre} (${col.tipo}) - Nulo: ${col.nulo}`);
       });
     });
-    
+
     // 4. Resumen para la API
     const resumenTablas = {
       total_tablas: tablas.rows.length,
@@ -227,13 +222,13 @@ export const obtenerEstructuraCompletaDB = async () => {
         }))
       }))
     };
-    
+
     return {
       success: true,
       estructura_completa: tablasConDetalles,
       resumen: resumenTablas
     };
-    
+
   } catch (error) {
     console.error('❌ Error obteniendo estructura de base de datos:', error.message);
     return {
@@ -253,20 +248,20 @@ export const obtenerEstructuraCompletaDB = async () => {
  */
 export const testConexionSimple = async () => {
   let client;
-  
+
   try {
     client = await pool.connect();
     const result = await client.query('SELECT 1 as ok');
     client.release();
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       test: result.rows[0].ok,
       message: 'Conexión a PostgreSQL funcional'
     };
   } catch (error) {
-    return { 
-      success: false, 
+    return {
+      success: false,
       error: error.message,
       message: 'Error conectando a PostgreSQL'
     };
@@ -279,11 +274,11 @@ export const testConexionSimple = async () => {
  */
 export const inicializarDB = async () => {
   console.log('\n🔧 ===== INICIALIZANDO BASE DE DATOS =====');
-  
+
   // 1. Verificar conexión básica
   console.log('🔗 Verificando conexión básica...');
   const conexion = await verificarConexionDB();
-  
+
   if (!conexion.success) {
     console.error('❌ No se pudo conectar a PostgreSQL');
     return {
@@ -292,13 +287,13 @@ export const inicializarDB = async () => {
       estructura: null
     };
   }
-  
+
   console.log('✅ Conexión básica establecida');
-  
+
   // 2. Obtener estructura COMPLETA de la base de datos
   console.log('🔍 Obteniendo estructura completa...');
   const estructura = await obtenerEstructuraCompletaDB();
-  
+
   if (!estructura.success) {
     console.error('⚠️ No se pudo obtener estructura completa');
     return {
@@ -308,14 +303,14 @@ export const inicializarDB = async () => {
       warning: 'Conexión exitosa pero no se pudo analizar estructura'
     };
   }
-  
+
   console.log('✅ Estructura obtenida exitosamente');
-  
+
   // 3. Generar resumen para logs
   console.log('\n📋 ===== RESUMEN INICIAL =====');
   console.log(`   ✅ PostgreSQL conectado: ${conexion.database}`);
   console.log(`   ✅ Total tablas: ${estructura.resumen.total_tablas}`);
-  
+
   return {
     initialized: true,
     connection: conexion,

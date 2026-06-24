@@ -3,6 +3,7 @@
  */
 import express from 'express';
 import * as calendarioControlador from '../controladores/calendarioControlador.js';
+import { autenticarUsuario, verificarRol, verificarGrupo } from '../middleware/autenticacionMiddleware.js';
 
 const router = express.Router();
 
@@ -12,10 +13,10 @@ const router = express.Router();
  * 1. Obtener configuración del calendario
  * POST /api/calendario/configuracion
  */
-router.post('/configuracion', async (req, res) => {
+router.post('/configuracion', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -23,16 +24,16 @@ router.post('/configuracion', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await calendarioControlador.obtenerConfiguracionCalendario(usuario_id);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'ADULTO_NO_ENCONTRADO' ? 404 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /configuracion:', error.message);
     res.status(500).json({
@@ -47,10 +48,10 @@ router.post('/configuracion', async (req, res) => {
  * 2. Guardar configuración del calendario
  * POST /api/calendario/guardar-configuracion
  */
-router.post('/guardar-configuracion', async (req, res) => {
+router.post('/guardar-configuracion', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, configuracion } = req.body;
-    
+
     if (!usuario_id || !configuracion) {
       return res.status(400).json({
         exito: false,
@@ -58,16 +59,16 @@ router.post('/guardar-configuracion', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await calendarioControlador.guardarConfiguracionCalendario(usuario_id, configuracion);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'ADULTO_NO_ENCONTRADO' ? 404 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /guardar-configuracion:', error.message);
     res.status(500).json({
@@ -84,10 +85,10 @@ router.post('/guardar-configuracion', async (req, res) => {
  * 3. Obtener todos los eventos
  * POST /api/calendario/eventos
  */
-router.post('/eventos', async (req, res) => {
+router.post('/eventos', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -95,11 +96,11 @@ router.post('/eventos', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await calendarioControlador.obtenerEventos(usuario_id);
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /eventos:', error.message);
     res.status(500).json({
@@ -114,10 +115,10 @@ router.post('/eventos', async (req, res) => {
  * 4. Obtener eventos por rango de fechas
  * POST /api/calendario/eventos-rango
  */
-router.post('/eventos-rango', async (req, res) => {
+router.post('/eventos-rango', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, fecha_inicio, fecha_fin } = req.body;
-    
+
     if (!usuario_id || !fecha_inicio || !fecha_fin) {
       return res.status(400).json({
         exito: false,
@@ -125,16 +126,16 @@ router.post('/eventos-rango', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await calendarioControlador.obtenerEventosPorRango(usuario_id, fecha_inicio, fecha_fin);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'FECHA_FORMATO_INVALIDO' ? 400 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /eventos-rango:', error.message);
     res.status(500).json({
@@ -149,10 +150,10 @@ router.post('/eventos-rango', async (req, res) => {
  * 5. Obtener eventos por fecha específica
  * POST /api/calendario/eventos-fecha
  */
-router.post('/eventos-fecha', async (req, res) => {
+router.post('/eventos-fecha', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, fecha } = req.body;
-    
+
     if (!usuario_id || !fecha) {
       return res.status(400).json({
         exito: false,
@@ -160,11 +161,11 @@ router.post('/eventos-fecha', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await calendarioControlador.obtenerEventosPorFecha(usuario_id, fecha);
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /eventos-fecha:', error.message);
     res.status(500).json({
@@ -179,10 +180,10 @@ router.post('/eventos-fecha', async (req, res) => {
  * 6. Obtener eventos próximos
  * POST /api/calendario/eventos-proximos
  */
-router.post('/eventos-proximos', async (req, res) => {
+router.post('/eventos-proximos', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, limite } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -190,11 +191,11 @@ router.post('/eventos-proximos', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await calendarioControlador.obtenerEventosProximos(usuario_id, limite || 10);
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /eventos-proximos:', error.message);
     res.status(500).json({
@@ -209,10 +210,10 @@ router.post('/eventos-proximos', async (req, res) => {
  * 7. Crear evento
  * POST /api/calendario/crear-evento
  */
-router.post('/crear-evento', async (req, res) => {
+router.post('/crear-evento', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, evento } = req.body;
-    
+
     if (!usuario_id || !evento) {
       return res.status(400).json({
         exito: false,
@@ -220,21 +221,21 @@ router.post('/crear-evento', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await calendarioControlador.crearEvento(usuario_id, evento);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'DATOS_INCOMPLETOS' ? 400 :
-                       resultado.codigo === 'SIN_ACCESO' ? 403 :
-                       resultado.codigo === 'FAMILIAR_NO_VALIDO' ? 400 :
-                       resultado.codigo === 'FECHAS_INVALIDAS' ? 400 :
-                       resultado.codigo === 'CONFLICTO_HORARIO' ? 409 :
-                       resultado.codigo === 'EVENTO_DUPLICADO' ? 409 : 500;
+        resultado.codigo === 'SIN_ACCESO' ? 403 :
+          resultado.codigo === 'FAMILIAR_NO_VALIDO' ? 400 :
+            resultado.codigo === 'FECHAS_INVALIDAS' ? 400 :
+              resultado.codigo === 'CONFLICTO_HORARIO' ? 409 :
+                resultado.codigo === 'EVENTO_DUPLICADO' ? 409 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(201).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /crear-evento:', error.message);
     res.status(500).json({
@@ -249,11 +250,11 @@ router.post('/crear-evento', async (req, res) => {
  * 8. Actualizar evento
  * PUT /api/calendario/actualizar-evento/:id
  */
-router.put('/actualizar-evento/:id', async (req, res) => {
+router.put('/actualizar-evento/:id', autenticarUsuario, async (req, res) => {
   try {
     const { id } = req.params;
     const { usuario_id, evento } = req.body;
-    
+
     if (!id || !usuario_id || !evento) {
       return res.status(400).json({
         exito: false,
@@ -261,18 +262,18 @@ router.put('/actualizar-evento/:id', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await calendarioControlador.actualizarEvento(id, usuario_id, evento);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'EVENTO_NO_ENCONTRADO' ? 404 :
-                       resultado.codigo === 'SIN_PERMISOS' ? 403 :
-                       resultado.codigo === 'SIN_CAMPOS' ? 400 : 500;
+        resultado.codigo === 'SIN_PERMISOS' ? 403 :
+          resultado.codigo === 'SIN_CAMPOS' ? 400 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /actualizar-evento:', error.message);
     res.status(500).json({
@@ -287,11 +288,11 @@ router.put('/actualizar-evento/:id', async (req, res) => {
  * 9. Eliminar evento
  * DELETE /api/calendario/eliminar-evento/:id
  */
-router.delete('/eliminar-evento/:id', async (req, res) => {
+router.delete('/eliminar-evento/:id', autenticarUsuario, async (req, res) => {
   try {
     const { id } = req.params;
     const { usuario_id } = req.body;
-    
+
     if (!id || !usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -299,17 +300,17 @@ router.delete('/eliminar-evento/:id', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await calendarioControlador.eliminarEvento(id, usuario_id);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'EVENTO_NO_ENCONTRADO' ? 404 :
-                       resultado.codigo === 'SIN_PERMISOS' ? 403 : 500;
+        resultado.codigo === 'SIN_PERMISOS' ? 403 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /eliminar-evento:', error.message);
     res.status(500).json({
@@ -324,10 +325,10 @@ router.delete('/eliminar-evento/:id', async (req, res) => {
  * 10. Obtener eventos por tipo
  * POST /api/calendario/eventos-tipo
  */
-router.post('/eventos-tipo', async (req, res) => {
+router.post('/eventos-tipo', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, tipo } = req.body;
-    
+
     if (!usuario_id || !tipo) {
       return res.status(400).json({
         exito: false,
@@ -335,11 +336,11 @@ router.post('/eventos-tipo', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await calendarioControlador.obtenerEventosPorTipo(usuario_id, tipo);
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /eventos-tipo:', error.message);
     res.status(500).json({
@@ -354,10 +355,10 @@ router.post('/eventos-tipo', async (req, res) => {
  * 11. Obtener eventos de hoy
  * POST /api/calendario/eventos-hoy
  */
-router.post('/eventos-hoy', async (req, res) => {
+router.post('/eventos-hoy', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -365,11 +366,11 @@ router.post('/eventos-hoy', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await calendarioControlador.obtenerEventosHoy(usuario_id);
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /eventos-hoy:', error.message);
     res.status(500).json({
@@ -386,10 +387,10 @@ router.post('/eventos-hoy', async (req, res) => {
  * 12. Obtener estadísticas de eventos
  * POST /api/calendario/estadisticas
  */
-router.post('/estadisticas', async (req, res) => {
+router.post('/estadisticas', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, fecha_inicio, fecha_fin } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -397,15 +398,15 @@ router.post('/estadisticas', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await calendarioControlador.obtenerEstadisticasEventos(
-      usuario_id, 
-      fecha_inicio, 
+      usuario_id,
+      fecha_inicio,
       fecha_fin
     );
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /estadisticas:', error.message);
     res.status(500).json({
@@ -420,10 +421,10 @@ router.post('/estadisticas', async (req, res) => {
  * 13. Buscar eventos
  * POST /api/calendario/buscar-eventos
  */
-router.post('/buscar-eventos', async (req, res) => {
+router.post('/buscar-eventos', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, busqueda } = req.body;
-    
+
     if (!usuario_id || !busqueda) {
       return res.status(400).json({
         exito: false,
@@ -431,11 +432,11 @@ router.post('/buscar-eventos', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await calendarioControlador.buscarEventos(usuario_id, busqueda);
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /buscar-eventos:', error.message);
     res.status(500).json({
@@ -452,12 +453,12 @@ router.post('/buscar-eventos', async (req, res) => {
  * 14. Obtener tipos de eventos predefinidos
  * GET /api/calendario/tipos-eventos
  */
-router.get('/tipos-eventos', async (req, res) => {
+router.get('/tipos-eventos', autenticarUsuario, async (req, res) => {
   try {
     const resultado = await calendarioControlador.obtenerTiposEventosPredefinidos();
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /tipos-eventos:', error.message);
     res.status(500).json({
@@ -472,10 +473,10 @@ router.get('/tipos-eventos', async (req, res) => {
  * 15. Obtener cumpleaños de familiares
  * POST /api/calendario/cumpleanos
  */
-router.post('/cumpleanos', async (req, res) => {
+router.post('/cumpleanos', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -483,11 +484,11 @@ router.post('/cumpleanos', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await calendarioControlador.obtenerCumpleanosFamiliares(usuario_id);
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /cumpleanos:', error.message);
     res.status(500).json({
@@ -502,10 +503,10 @@ router.post('/cumpleanos', async (req, res) => {
  * 16. Obtener resumen del calendario
  * POST /api/calendario/resumen
  */
-router.post('/resumen', async (req, res) => {
+router.post('/resumen', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -513,7 +514,7 @@ router.post('/resumen', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     // Obtener múltiples datos en paralelo
     const [
       eventosProximosResult,
@@ -528,7 +529,7 @@ router.post('/resumen', async (req, res) => {
       calendarioControlador.obtenerEstadisticasEventos(usuario_id),
       calendarioControlador.obtenerConfiguracionCalendario(usuario_id)
     ]);
-    
+
     // Preparar resumen consolidado
     const resumen = {
       eventos_proximos: eventosProximosResult.exito ? eventosProximosResult.eventos : [],
@@ -539,33 +540,33 @@ router.post('/resumen', async (req, res) => {
       estadisticas: estadisticasResult.exito ? estadisticasResult.estadisticas : {},
       configuracion: configuracionResult.exito ? configuracionResult.configuracion : null
     };
-    
+
     // Calcular eventos por venir en los próximos 7 días
     const hoy = new Date();
     const proximaSemana = new Date();
     proximaSemana.setDate(hoy.getDate() + 7);
-    
+
     const eventosSemanaResult = await calendarioControlador.obtenerEventosPorRango(
       usuario_id,
       hoy.toISOString().split('T')[0],
       proximaSemana.toISOString().split('T')[0]
     );
-    
+
     if (eventosSemanaResult.exito) {
       resumen.eventos_proxima_semana = eventosSemanaResult.eventos.length;
       resumen.dias_con_eventos = new Set(
         eventosSemanaResult.eventos.map(e => e.fecha_inicio)
       ).size;
     }
-    
+
     console.log('✅ Resumen del calendario generado');
-    
+
     res.status(200).json({
       exito: true,
       resumen,
       fecha_generacion: new Date().toISOString()
     });
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /resumen:', error.message);
     res.status(500).json({
@@ -580,10 +581,10 @@ router.post('/resumen', async (req, res) => {
  * 17. Exportar calendario a diferentes formatos
  * POST /api/calendario/exportar
  */
-router.post('/exportar', async (req, res) => {
+router.post('/exportar', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, formato, fecha_inicio, fecha_fin } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -591,24 +592,24 @@ router.post('/exportar', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     // Obtener eventos en el rango especificado
     const fechaInicio = fecha_inicio || new Date().toISOString().split('T')[0];
     const fechaFin = fecha_fin || fechaInicio;
-    
+
     const eventosResult = await calendarioControlador.obtenerEventosPorRango(
       usuario_id,
       fechaInicio,
       fechaFin
     );
-    
+
     if (!eventosResult.exito) {
       return res.status(400).json(eventosResult);
     }
-    
+
     // Obtener configuración
     const configuracionResult = await calendarioControlador.obtenerConfiguracionCalendario(usuario_id);
-    
+
     // Preparar datos para exportación
     const datosExportacion = {
       eventos: eventosResult.eventos,
@@ -620,9 +621,9 @@ router.post('/exportar', async (req, res) => {
       },
       fecha_exportacion: new Date().toISOString()
     };
-    
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    
+
     res.status(200).json({
       exito: true,
       datos: datosExportacion,
@@ -630,7 +631,7 @@ router.post('/exportar', async (req, res) => {
       nombre_archivo: `calendario_${timestamp}.${formato || 'json'}`,
       mensaje: 'Datos del calendario listos para exportación'
     });
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /exportar:', error.message);
     res.status(500).json({
@@ -645,10 +646,10 @@ router.post('/exportar', async (req, res) => {
  * 18. Verificar conflictos de horario
  * POST /api/calendario/verificar-conflictos
  */
-router.post('/verificar-conflictos', async (req, res) => {
+router.post('/verificar-conflictos', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, evento } = req.body;
-    
+
     if (!usuario_id || !evento) {
       return res.status(400).json({
         exito: false,
@@ -656,35 +657,35 @@ router.post('/verificar-conflictos', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     // Obtener eventos existentes en el rango de fechas
     const fechaInicio = evento.fecha_inicio;
     const fechaFin = evento.fecha_fin || evento.fecha_inicio;
-    
+
     const eventosExistentes = await calendarioControlador.obtenerEventosPorRango(
       usuario_id,
       fechaInicio,
       fechaFin
     );
-    
+
     if (!eventosExistentes.exito) {
       return res.status(400).json(eventosExistentes);
     }
-    
+
     // Verificar conflictos
     const conflictos = [];
     const eventoInicio = new Date(`${fechaInicio}T${evento.hora_inicio || '00:00'}`);
     const eventoFin = new Date(`${fechaFin}T${evento.hora_fin || '23:59'}`);
-    
+
     eventosExistentes.eventos.forEach(eventoExistente => {
       // Excluir el mismo evento si estamos editando
       if (evento.id && eventoExistente.id === evento.id) {
         return;
       }
-      
+
       const existenteInicio = new Date(`${eventoExistente.fecha_inicio}T${eventoExistente.hora_inicio || '00:00'}`);
       const existenteFin = new Date(`${eventoExistente.fecha_fin}T${eventoExistente.hora_fin || '23:59'}`);
-      
+
       // Verificar superposición
       if (
         (eventoInicio >= existenteInicio && eventoInicio < existenteFin) ||
@@ -703,17 +704,17 @@ router.post('/verificar-conflictos', async (req, res) => {
         });
       }
     });
-    
+
     res.status(200).json({
       exito: true,
       tiene_conflictos: conflictos.length > 0,
       conflictos: conflictos,
       total_conflictos: conflictos.length,
-      recomendacion: conflictos.length > 0 
+      recomendacion: conflictos.length > 0
         ? 'Considera ajustar el horario para evitar conflictos'
         : 'No hay conflictos de horario'
     });
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /verificar-conflictos:', error.message);
     res.status(500).json({
@@ -728,10 +729,10 @@ router.post('/verificar-conflictos', async (req, res) => {
  * 19. Sincronizar calendario
  * POST /api/calendario/sincronizar
  */
-router.post('/sincronizar', async (req, res) => {
+router.post('/sincronizar', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, datos_sincronizacion } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -739,12 +740,12 @@ router.post('/sincronizar', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     console.log('🔄 Sincronizando calendario para usuario:', usuario_id);
-    
+
     // Aquí implementarías la lógica de sincronización
     // Por ahora, devolvemos un estado básico
-    
+
     res.status(200).json({
       exito: true,
       sincronizado_en: new Date().toISOString(),
@@ -754,7 +755,7 @@ router.post('/sincronizar', async (req, res) => {
       eventos_eliminados: 0,
       mensaje: 'Sincronización del calendario completada (modo de demostración)'
     });
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /sincronizar:', error.message);
     res.status(500).json({
@@ -784,10 +785,10 @@ router.get('/status', (req, res) => {
  * 21. Obtener recordatorios de eventos
  * POST /api/calendario/recordatorios
  */
-router.post('/recordatorios', async (req, res) => {
+router.post('/recordatorios', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -795,37 +796,37 @@ router.post('/recordatorios', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     // Obtener eventos próximos con recordatorio activado
     const eventosProximosResult = await calendarioControlador.obtenerEventosProximos(usuario_id, 20);
-    
+
     if (!eventosProximosResult.exito) {
       return res.status(400).json(eventosProximosResult);
     }
-    
+
     // Filtrar eventos con recordatorio
     const ahora = new Date();
     const recordatorios = [];
-    
+
     eventosProximosResult.eventos.forEach(evento => {
       if (evento.recordatorio && evento.recordatorio_minutos) {
         const fechaEvento = new Date(`${evento.fecha_inicio}T${evento.hora_inicio || '09:00'}`);
         const fechaRecordatorio = new Date(fechaEvento);
         fechaRecordatorio.setMinutes(fechaRecordatorio.getMinutes() - evento.recordatorio_minutos);
-        
+
         // Solo incluir recordatorios que aún no han pasado
         if (fechaRecordatorio > ahora) {
           const minutosRestantes = Math.ceil((fechaRecordatorio - ahora) / (1000 * 60));
           const horasRestantes = Math.ceil(minutosRestantes / 60);
           const diasRestantes = Math.ceil(minutosRestantes / (60 * 24));
-          
+
           let tipoRecordatorio = 'pronto';
           if (diasRestantes > 1) {
             tipoRecordatorio = 'futuro';
           } else if (minutosRestantes <= 60) {
             tipoRecordatorio = 'inminente';
           }
-          
+
           recordatorios.push({
             evento_id: evento.id,
             titulo: evento.titulo,
@@ -840,12 +841,12 @@ router.post('/recordatorios', async (req, res) => {
         }
       }
     });
-    
+
     // Ordenar por proximidad
     recordatorios.sort((a, b) => a.minutos_restantes - b.minutos_restantes);
-    
+
     console.log(`✅ Encontrados ${recordatorios.length} recordatorios activos`);
-    
+
     res.status(200).json({
       exito: true,
       recordatorios,
@@ -853,7 +854,7 @@ router.post('/recordatorios', async (req, res) => {
       proximo_recordatorio: recordatorios.length > 0 ? recordatorios[0] : null,
       fecha_consulta: ahora.toISOString()
     });
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /recordatorios:', error.message);
     res.status(500).json({

@@ -3,6 +3,7 @@
  */
 import express from 'express';
 import * as preferenciasControlador from '../controladores/preferenciasControlador.js';
+import { autenticarUsuario, verificarRol, verificarGrupo } from '../middleware/autenticacionMiddleware.js';
 
 const router = express.Router();
 
@@ -12,10 +13,10 @@ const router = express.Router();
  * 1. Obtener información del usuario
  * POST /api/preferencias/informacion-usuario
  */
-router.post('/informacion-usuario', async (req, res) => {
+router.post('/informacion-usuario', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -23,16 +24,16 @@ router.post('/informacion-usuario', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await preferenciasControlador.obtenerInformacionUsuario(usuario_id);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'USUARIO_NO_ENCONTRADO' ? 404 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /informacion-usuario:', error.message);
     res.status(500).json({
@@ -47,10 +48,10 @@ router.post('/informacion-usuario', async (req, res) => {
  * 2. Actualizar información del usuario
  * PUT /api/preferencias/actualizar-usuario
  */
-router.put('/actualizar-usuario', async (req, res) => {
+router.put('/actualizar-usuario', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, datos } = req.body;
-    
+
     if (!usuario_id || !datos) {
       return res.status(400).json({
         exito: false,
@@ -58,18 +59,18 @@ router.put('/actualizar-usuario', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await preferenciasControlador.actualizarUsuario(usuario_id, datos);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'USUARIO_NO_ENCONTRADO' ? 404 :
-                       resultado.codigo === 'SIN_CAMPOS' ? 400 :
-                       resultado.codigo === 'EMAIL_DUPLICADO' ? 409 : 500;
+        resultado.codigo === 'SIN_CAMPOS' ? 400 :
+          resultado.codigo === 'EMAIL_DUPLICADO' ? 409 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /actualizar-usuario:', error.message);
     res.status(500).json({
@@ -84,10 +85,10 @@ router.put('/actualizar-usuario', async (req, res) => {
  * 3. Cambiar contraseña
  * POST /api/preferencias/cambiar-contrasena
  */
-router.post('/cambiar-contrasena', async (req, res) => {
+router.post('/cambiar-contrasena', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, contrasena_actual, nueva_contrasena } = req.body;
-    
+
     if (!usuario_id || !contrasena_actual || !nueva_contrasena) {
       return res.status(400).json({
         exito: false,
@@ -95,22 +96,22 @@ router.post('/cambiar-contrasena', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await preferenciasControlador.cambiarContrasena(usuario_id, {
       contrasena_actual,
       nueva_contrasena
     });
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'USUARIO_NO_ENCONTRADO' ? 404 :
-                       resultado.codigo === 'DATOS_INCOMPLETOS' ? 400 :
-                       resultado.codigo === 'CONTRASENA_CORTA' ? 400 :
-                       resultado.codigo === 'CONTRASENA_ACTUAL_INCORRECTA' ? 401 : 500;
+        resultado.codigo === 'DATOS_INCOMPLETOS' ? 400 :
+          resultado.codigo === 'CONTRASENA_CORTA' ? 400 :
+            resultado.codigo === 'CONTRASENA_ACTUAL_INCORRECTA' ? 401 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /cambiar-contrasena:', error.message);
     res.status(500).json({
@@ -127,10 +128,10 @@ router.post('/cambiar-contrasena', async (req, res) => {
  * 4. Obtener teléfonos del usuario
  * POST /api/preferencias/telefonos
  */
-router.post('/telefonos', async (req, res) => {
+router.post('/telefonos', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -138,11 +139,11 @@ router.post('/telefonos', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await preferenciasControlador.obtenerTelefonosUsuario(usuario_id);
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /telefonos:', error.message);
     res.status(500).json({
@@ -157,10 +158,10 @@ router.post('/telefonos', async (req, res) => {
  * 5. Agregar teléfono
  * POST /api/preferencias/telefonos/agregar
  */
-router.post('/telefonos/agregar', async (req, res) => {
+router.post('/telefonos/agregar', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, numero, tipo, principal } = req.body;
-    
+
     if (!usuario_id || !numero) {
       return res.status(400).json({
         exito: false,
@@ -168,22 +169,22 @@ router.post('/telefonos/agregar', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await preferenciasControlador.agregarTelefono(usuario_id, {
       numero,
       tipo,
       principal
     });
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'DATOS_INCOMPLETOS' ? 400 :
-                       resultado.codigo === 'TELEFONO_INVALIDO' ? 400 :
-                       resultado.codigo === 'TELEFONO_DUPLICADO' ? 409 : 500;
+        resultado.codigo === 'TELEFONO_INVALIDO' ? 400 :
+          resultado.codigo === 'TELEFONO_DUPLICADO' ? 409 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(201).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /telefonos/agregar:', error.message);
     res.status(500).json({
@@ -198,11 +199,11 @@ router.post('/telefonos/agregar', async (req, res) => {
  * 6. Eliminar teléfono
  * DELETE /api/preferencias/telefonos/eliminar/:telefono_id
  */
-router.delete('/telefonos/eliminar/:telefono_id', async (req, res) => {
+router.delete('/telefonos/eliminar/:telefono_id', autenticarUsuario, async (req, res) => {
   try {
     const { telefono_id } = req.params;
     const { usuario_id } = req.body;
-    
+
     if (!telefono_id || !usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -210,17 +211,17 @@ router.delete('/telefonos/eliminar/:telefono_id', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await preferenciasControlador.eliminarTelefono(telefono_id, usuario_id);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'TELEFONO_NO_ENCONTRADO' ? 404 :
-                       resultado.codigo === 'UNICO_TELEFONO' ? 400 : 500;
+        resultado.codigo === 'UNICO_TELEFONO' ? 400 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /telefonos/eliminar:', error.message);
     res.status(500).json({
@@ -235,11 +236,11 @@ router.delete('/telefonos/eliminar/:telefono_id', async (req, res) => {
  * 7. Marcar teléfono como principal
  * POST /api/preferencias/telefonos/marcar-principal/:telefono_id
  */
-router.post('/telefonos/marcar-principal/:telefono_id', async (req, res) => {
+router.post('/telefonos/marcar-principal/:telefono_id', autenticarUsuario, async (req, res) => {
   try {
     const { telefono_id } = req.params;
     const { usuario_id } = req.body;
-    
+
     if (!telefono_id || !usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -247,16 +248,16 @@ router.post('/telefonos/marcar-principal/:telefono_id', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await preferenciasControlador.marcarTelefonoPrincipal(telefono_id, usuario_id);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'TELEFONO_NO_ENCONTRADO' ? 404 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /telefonos/marcar-principal:', error.message);
     res.status(500).json({
@@ -273,10 +274,10 @@ router.post('/telefonos/marcar-principal/:telefono_id', async (req, res) => {
  * 8. Obtener preferencias del usuario
  * POST /api/preferencias/preferencias
  */
-router.post('/preferencias', async (req, res) => {
+router.post('/preferencias', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -284,11 +285,11 @@ router.post('/preferencias', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await preferenciasControlador.obtenerPreferenciasUsuario(usuario_id);
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /preferencias:', error.message);
     res.status(500).json({
@@ -303,10 +304,10 @@ router.post('/preferencias', async (req, res) => {
  * 9. Actualizar preferencias
  * PUT /api/preferencias/actualizar-preferencias
  */
-router.put('/actualizar-preferencias', async (req, res) => {
+router.put('/actualizar-preferencias', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, preferencias } = req.body;
-    
+
     if (!usuario_id || !preferencias) {
       return res.status(400).json({
         exito: false,
@@ -314,11 +315,11 @@ router.put('/actualizar-preferencias', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await preferenciasControlador.actualizarPreferencias(usuario_id, preferencias);
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /actualizar-preferencias:', error.message);
     res.status(500).json({
@@ -335,10 +336,10 @@ router.put('/actualizar-preferencias', async (req, res) => {
  * 10. Verificar otros administradores
  * POST /api/preferencias/verificar-administradores
  */
-router.post('/verificar-administradores', async (req, res) => {
+router.post('/verificar-administradores', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -346,11 +347,11 @@ router.post('/verificar-administradores', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await preferenciasControlador.verificarOtrosAdministradores(usuario_id);
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /verificar-administradores:', error.message);
     res.status(500).json({
@@ -365,10 +366,10 @@ router.post('/verificar-administradores', async (req, res) => {
  * 11. Renunciar a rol de administrador
  * POST /api/preferencias/renunciar-administrador
  */
-router.post('/renunciar-administrador', async (req, res) => {
+router.post('/renunciar-administrador', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -376,16 +377,16 @@ router.post('/renunciar-administrador', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await preferenciasControlador.renunciarAdministrador(usuario_id);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'UNICO_ADMINISTRADOR' ? 400 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /renunciar-administrador:', error.message);
     res.status(500).json({
@@ -402,10 +403,10 @@ router.post('/renunciar-administrador', async (req, res) => {
  * 12. Obtener sesiones activas
  * POST /api/preferencias/sesiones-activas
  */
-router.post('/sesiones-activas', async (req, res) => {
+router.post('/sesiones-activas', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -413,11 +414,11 @@ router.post('/sesiones-activas', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await preferenciasControlador.obtenerSesionesActivas(usuario_id);
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /sesiones-activas:', error.message);
     res.status(500).json({
@@ -432,10 +433,10 @@ router.post('/sesiones-activas', async (req, res) => {
  * 13. Cerrar otras sesiones
  * POST /api/preferencias/cerrar-sesiones
  */
-router.post('/cerrar-sesiones', async (req, res) => {
+router.post('/cerrar-sesiones', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, sesion_actual_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -443,11 +444,11 @@ router.post('/cerrar-sesiones', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await preferenciasControlador.cerrarOtrasSesiones(usuario_id, sesion_actual_id);
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /cerrar-sesiones:', error.message);
     res.status(500).json({
@@ -462,10 +463,10 @@ router.post('/cerrar-sesiones', async (req, res) => {
  * 14. Solicitar eliminación de cuenta
  * POST /api/preferencias/solicitar-eliminacion-cuenta
  */
-router.post('/solicitar-eliminacion-cuenta', async (req, res) => {
+router.post('/solicitar-eliminacion-cuenta', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, razon } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -473,17 +474,17 @@ router.post('/solicitar-eliminacion-cuenta', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await preferenciasControlador.solicitarEliminacionCuenta(usuario_id, razon);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'USUARIO_NO_ENCONTRADO' ? 404 :
-                       resultado.codigo === 'UNICO_ADMINISTRADOR_ELIMINAR' ? 400 : 500;
+        resultado.codigo === 'UNICO_ADMINISTRADOR_ELIMINAR' ? 400 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /solicitar-eliminacion-cuenta:', error.message);
     res.status(500).json({
@@ -500,10 +501,10 @@ router.post('/solicitar-eliminacion-cuenta', async (req, res) => {
  * 15. Actualizar foto de perfil
  * POST /api/preferencias/actualizar-foto-perfil
  */
-router.post('/actualizar-foto-perfil', async (req, res) => {
+router.post('/actualizar-foto-perfil', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, foto_base64, tipo } = req.body;
-    
+
     if (!usuario_id || !foto_base64) {
       return res.status(400).json({
         exito: false,
@@ -511,20 +512,20 @@ router.post('/actualizar-foto-perfil', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await preferenciasControlador.actualizarFotoPerfil(usuario_id, {
       foto_base64,
       tipo
     });
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'DATOS_INCOMPLETOS' ? 400 :
-                       resultado.codigo === 'IMAGEN_DEMASIADO_GRANDE' ? 400 : 500;
+        resultado.codigo === 'IMAGEN_DEMASIADO_GRANDE' ? 400 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /actualizar-foto-perfil:', error.message);
     res.status(500).json({
@@ -539,10 +540,10 @@ router.post('/actualizar-foto-perfil', async (req, res) => {
  * 16. Obtener actividad reciente
  * POST /api/preferencias/actividad-reciente
  */
-router.post('/actividad-reciente', async (req, res) => {
+router.post('/actividad-reciente', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, limite } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -550,11 +551,11 @@ router.post('/actividad-reciente', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await preferenciasControlador.obtenerActividadReciente(usuario_id, limite || 10);
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /actividad-reciente:', error.message);
     res.status(500).json({
@@ -571,10 +572,10 @@ router.post('/actividad-reciente', async (req, res) => {
  * 17. Exportar datos del usuario
  * POST /api/preferencias/exportar-datos
  */
-router.post('/exportar-datos', async (req, res) => {
+router.post('/exportar-datos', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -582,7 +583,7 @@ router.post('/exportar-datos', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     // Obtener múltiples datos del usuario
     const [
       informacionResult,
@@ -597,7 +598,7 @@ router.post('/exportar-datos', async (req, res) => {
       preferenciasControlador.obtenerSesionesActivas(usuario_id),
       preferenciasControlador.obtenerActividadReciente(usuario_id, 50)
     ]);
-    
+
     const datosExportacion = {
       usuario: informacionResult.exito ? informacionResult.usuario : null,
       preferencias: preferenciasResult.exito ? preferenciasResult.preferencias : {},
@@ -607,16 +608,16 @@ router.post('/exportar-datos', async (req, res) => {
       fecha_exportacion: new Date().toISOString(),
       formato: 'json'
     };
-    
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    
+
     res.status(200).json({
       exito: true,
       datos: datosExportacion,
       nombre_archivo: `datos_usuario_${timestamp}.json`,
       mensaje: 'Datos listos para exportación'
     });
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /exportar-datos:', error.message);
     res.status(500).json({
@@ -631,10 +632,10 @@ router.post('/exportar-datos', async (req, res) => {
  * 18. Obtener resumen de preferencias
  * POST /api/preferencias/resumen
  */
-router.post('/resumen', async (req, res) => {
+router.post('/resumen', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -642,7 +643,7 @@ router.post('/resumen', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     // Obtener datos principales
     const [
       informacionResult,
@@ -653,7 +654,7 @@ router.post('/resumen', async (req, res) => {
       preferenciasControlador.obtenerPreferenciasUsuario(usuario_id),
       preferenciasControlador.obtenerTelefonosUsuario(usuario_id)
     ]);
-    
+
     const resumen = {
       usuario: informacionResult.exito ? {
         nombre: informacionResult.usuario.nombre,
@@ -662,22 +663,22 @@ router.post('/resumen', async (req, res) => {
         rol: informacionResult.usuario.rol
       } : null,
       preferencias: preferenciasResult.exito ? preferenciasResult.preferencias : {},
-      telefonos_principales: telefonosResult.exito 
+      telefonos_principales: telefonosResult.exito
         ? telefonosResult.telefonos.filter(t => t.principal).map(t => ({
-            numero: t.numero,
-            tipo: t.tipo
-          }))
+          numero: t.numero,
+          tipo: t.tipo
+        }))
         : [],
       total_telefonos: telefonosResult.exito ? telefonosResult.total : 0,
       fecha_consulta: new Date().toISOString()
     };
-    
+
     res.status(200).json({
       exito: true,
       resumen,
       mensaje: 'Resumen de preferencias obtenido'
     });
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /resumen:', error.message);
     res.status(500).json({
@@ -692,10 +693,10 @@ router.post('/resumen', async (req, res) => {
  * 19. Sincronizar preferencias
  * POST /api/preferencias/sincronizar
  */
-router.post('/sincronizar', async (req, res) => {
+router.post('/sincronizar', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, datos_sincronizacion } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -703,16 +704,16 @@ router.post('/sincronizar', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     console.log('🔄 Sincronizando preferencias para usuario:', usuario_id);
-    
+
     res.status(200).json({
       exito: true,
       sincronizado_en: new Date().toISOString(),
       cambios_aplicados: 0,
       mensaje: 'Preferencias sincronizadas (modo de demostración)'
     });
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /sincronizar:', error.message);
     res.status(500).json({

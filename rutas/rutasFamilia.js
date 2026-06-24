@@ -3,6 +3,7 @@
  */
 import express from 'express';
 import * as familiaControlador from '../controladores/familiaControlador.js';
+import { autenticarUsuario, verificarRol, verificarGrupo } from '../middleware/autenticacionMiddleware.js';
 
 const router = express.Router();
 
@@ -12,10 +13,10 @@ const router = express.Router();
  * 1. Obtener información del grupo familiar del usuario
  * POST /api/familia/grupo-familiar
  */
-router.post('/grupo-familiar', async (req, res) => {
+router.post('/grupo-familiar', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -23,16 +24,16 @@ router.post('/grupo-familiar', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await familiaControlador.obtenerGrupoFamiliar(usuario_id);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'SIN_GRUPO' ? 404 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /grupo-familiar:', error.message);
     res.status(500).json({
@@ -47,10 +48,10 @@ router.post('/grupo-familiar', async (req, res) => {
  * 2. Obtener código familiar del grupo
  * POST /api/familia/codigo-familiar
  */
-router.post('/codigo-familiar', async (req, res) => {
+router.post('/codigo-familiar', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -58,17 +59,17 @@ router.post('/codigo-familiar', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await familiaControlador.obtenerCodigoFamiliar(usuario_id);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'SIN_GRUPO' ? 404 :
-                       resultado.codigo === 'SIN_PERMISOS' ? 403 : 500;
+        resultado.codigo === 'SIN_PERMISOS' ? 403 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /codigo-familiar:', error.message);
     res.status(500).json({
@@ -83,10 +84,10 @@ router.post('/codigo-familiar', async (req, res) => {
  * 3. Regenerar código familiar (solo administradores)
  * POST /api/familia/regenerar-codigo
  */
-router.post('/regenerar-codigo', async (req, res) => {
+router.post('/regenerar-codigo', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -94,17 +95,17 @@ router.post('/regenerar-codigo', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await familiaControlador.regenerarCodigoFamiliar(usuario_id);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'SIN_PERMISOS' ? 403 :
-                       resultado.codigo === 'ERROR_GENERACION_CODIGO' ? 500 : 500;
+        resultado.codigo === 'ERROR_GENERACION_CODIGO' ? 500 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /regenerar-codigo:', error.message);
     res.status(500).json({
@@ -121,10 +122,10 @@ router.post('/regenerar-codigo', async (req, res) => {
  * 4. Obtener todos los familiares del grupo
  * POST /api/familia/familiares
  */
-router.post('/familiares', async (req, res) => {
+router.post('/familiares', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -132,16 +133,16 @@ router.post('/familiares', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await familiaControlador.obtenerFamiliares(usuario_id);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'SIN_GRUPO' ? 404 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /familiares:', error.message);
     res.status(500).json({
@@ -156,10 +157,10 @@ router.post('/familiares', async (req, res) => {
  * 5. Agregar familiar al grupo (solo administradores)
  * POST /api/familia/agregar-familiar
  */
-router.post('/agregar-familiar', async (req, res) => {
+router.post('/agregar-familiar', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, datos_familiar } = req.body;
-    
+
     if (!usuario_id || !datos_familiar) {
       return res.status(400).json({
         exito: false,
@@ -167,20 +168,20 @@ router.post('/agregar-familiar', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await familiaControlador.crearFamiliar(usuario_id, datos_familiar);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'SIN_PERMISOS' ? 403 :
-                       resultado.codigo === 'GRUPO_LLENO' ? 400 :
-                       resultado.codigo === 'NOMBRE_REQUERIDO' ? 400 :
-                       resultado.codigo === 'USUARIO_EN_GRUPO' ? 409 :
-                       resultado.codigo === 'USUARIO_DUPLICADO' ? 409 : 500;
+        resultado.codigo === 'GRUPO_LLENO' ? 400 :
+          resultado.codigo === 'NOMBRE_REQUERIDO' ? 400 :
+            resultado.codigo === 'USUARIO_EN_GRUPO' ? 409 :
+              resultado.codigo === 'USUARIO_DUPLICADO' ? 409 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(201).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /agregar-familiar:', error.message);
     res.status(500).json({
@@ -195,11 +196,11 @@ router.post('/agregar-familiar', async (req, res) => {
  * 6. Actualizar información de un familiar
  * PUT /api/familia/actualizar-familiar/:familiar_id
  */
-router.put('/actualizar-familiar/:familiar_id', async (req, res) => {
+router.put('/actualizar-familiar/:familiar_id', autenticarUsuario, async (req, res) => {
   try {
     const { familiar_id } = req.params;
     const { usuario_id, datos_familiar } = req.body;
-    
+
     if (!familiar_id || !usuario_id || !datos_familiar) {
       return res.status(400).json({
         exito: false,
@@ -207,18 +208,18 @@ router.put('/actualizar-familiar/:familiar_id', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await familiaControlador.actualizarFamiliar(usuario_id, familiar_id, datos_familiar);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'SIN_PERMISOS' ? 403 :
-                       resultado.codigo === 'FAMILIAR_NO_ENCONTRADO' ? 404 :
-                       resultado.codigo === 'DATOS_INCOMPLETOS' ? 400 : 500;
+        resultado.codigo === 'FAMILIAR_NO_ENCONTRADO' ? 404 :
+          resultado.codigo === 'DATOS_INCOMPLETOS' ? 400 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /actualizar-familiar:', error.message);
     res.status(500).json({
@@ -233,11 +234,11 @@ router.put('/actualizar-familiar/:familiar_id', async (req, res) => {
  * 7. Eliminar familiar del grupo (solo administradores)
  * DELETE /api/familia/eliminar-familiar/:familiar_id
  */
-router.delete('/eliminar-familiar/:familiar_id', async (req, res) => {
+router.delete('/eliminar-familiar/:familiar_id', autenticarUsuario, async (req, res) => {
   try {
     const { familiar_id } = req.params;
     const { usuario_id } = req.body;
-    
+
     if (!familiar_id || !usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -245,18 +246,18 @@ router.delete('/eliminar-familiar/:familiar_id', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await familiaControlador.eliminarFamiliar(usuario_id, familiar_id);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'SIN_PERMISOS' ? 403 :
-                       resultado.codigo === 'FAMILIAR_NO_ENCONTRADO' ? 404 :
-                       resultado.codigo === 'UNICO_ADMIN' ? 400 : 500;
+        resultado.codigo === 'FAMILIAR_NO_ENCONTRADO' ? 404 :
+          resultado.codigo === 'UNICO_ADMIN' ? 400 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /eliminar-familiar:', error.message);
     res.status(500).json({
@@ -273,10 +274,10 @@ router.delete('/eliminar-familiar/:familiar_id', async (req, res) => {
  * 8. Obtener códigos personalizados del grupo (solo administradores)
  * POST /api/familia/codigos-personalizados
  */
-router.post('/codigos-personalizados', async (req, res) => {
+router.post('/codigos-personalizados', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -284,16 +285,16 @@ router.post('/codigos-personalizados', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await familiaControlador.obtenerCodigosPersonalizados(usuario_id);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'SIN_PERMISOS' ? 403 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /codigos-personalizados:', error.message);
     res.status(500).json({
@@ -308,10 +309,10 @@ router.post('/codigos-personalizados', async (req, res) => {
  * 9. Crear código personalizado (solo administradores)
  * POST /api/familia/crear-codigo-personalizado
  */
-router.post('/crear-codigo-personalizado', async (req, res) => {
+router.post('/crear-codigo-personalizado', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, datos_codigo } = req.body;
-    
+
     if (!usuario_id || !datos_codigo) {
       return res.status(400).json({
         exito: false,
@@ -319,19 +320,19 @@ router.post('/crear-codigo-personalizado', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await familiaControlador.crearCodigoPersonalizado(usuario_id, datos_codigo);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'SIN_PERMISOS' ? 403 :
-                       resultado.codigo === 'NOMBRE_REQUERIDO' ? 400 :
-                       resultado.codigo === 'ERROR_GENERACION_CODIGO' ? 500 :
-                       resultado.codigo === 'CODIGO_DUPLICADO' ? 409 : 500;
+        resultado.codigo === 'NOMBRE_REQUERIDO' ? 400 :
+          resultado.codigo === 'ERROR_GENERACION_CODIGO' ? 500 :
+            resultado.codigo === 'CODIGO_DUPLICADO' ? 409 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(201).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /crear-codigo-personalizado:', error.message);
     res.status(500).json({
@@ -346,11 +347,11 @@ router.post('/crear-codigo-personalizado', async (req, res) => {
  * 10. Eliminar código personalizado (solo administradores)
  * DELETE /api/familia/eliminar-codigo-personalizado/:codigo_id
  */
-router.delete('/eliminar-codigo-personalizado/:codigo_id', async (req, res) => {
+router.delete('/eliminar-codigo-personalizado/:codigo_id', autenticarUsuario, async (req, res) => {
   try {
     const { codigo_id } = req.params;
     const { usuario_id } = req.body;
-    
+
     if (!codigo_id || !usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -358,17 +359,17 @@ router.delete('/eliminar-codigo-personalizado/:codigo_id', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await familiaControlador.eliminarCodigoPersonalizado(usuario_id, codigo_id);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'SIN_PERMISOS' ? 403 :
-                       resultado.codigo === 'CODIGO_NO_ENCONTRADO' ? 404 : 500;
+        resultado.codigo === 'CODIGO_NO_ENCONTRADO' ? 404 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /eliminar-codigo-personalizado:', error.message);
     res.status(500).json({
@@ -385,10 +386,10 @@ router.delete('/eliminar-codigo-personalizado/:codigo_id', async (req, res) => {
  * 11. Crear/Actualizar información del adulto mayor del grupo
  * POST /api/familia/actualizar-adulto-mayor
  */
-router.post('/actualizar-adulto-mayor', async (req, res) => {
+router.post('/actualizar-adulto-mayor', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, datos_adulto_mayor } = req.body;
-    
+
     if (!usuario_id || !datos_adulto_mayor) {
       return res.status(400).json({
         exito: false,
@@ -396,17 +397,17 @@ router.post('/actualizar-adulto-mayor', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await familiaControlador.actualizarAdultoMayor(usuario_id, datos_adulto_mayor);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'SIN_PERMISOS' ? 403 :
-                       resultado.codigo === 'DATOS_INCOMPLETOS' ? 400 : 500;
+        resultado.codigo === 'DATOS_INCOMPLETOS' ? 400 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /actualizar-adulto-mayor:', error.message);
     res.status(500).json({
@@ -421,10 +422,10 @@ router.post('/actualizar-adulto-mayor', async (req, res) => {
  * 12. Obtener información del adulto mayor del grupo
  * POST /api/familia/adulto-mayor
  */
-router.post('/adulto-mayor', async (req, res) => {
+router.post('/adulto-mayor', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -432,17 +433,17 @@ router.post('/adulto-mayor', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await familiaControlador.obtenerAdultoMayor(usuario_id);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'SIN_GRUPO' ? 404 :
-                       resultado.codigo === 'NO_ADULTO_MAYOR' ? 404 : 500;
+        resultado.codigo === 'NO_ADULTO_MAYOR' ? 404 : 500;
       return res.status(statusCode).json(resultado);
     }
-    
+
     res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /adulto-mayor:', error.message);
     res.status(500).json({
@@ -459,10 +460,10 @@ router.post('/adulto-mayor', async (req, res) => {
  * 13. Obtener resumen del grupo familiar
  * POST /api/familia/resumen-grupo
  */
-router.post('/resumen-grupo', async (req, res) => {
+router.post('/resumen-grupo', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -470,22 +471,22 @@ router.post('/resumen-grupo', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     // Obtener grupo familiar completo
     const grupoResult = await familiaControlador.obtenerGrupoFamiliar(usuario_id);
-    
+
     if (!grupoResult.exito) {
       const statusCode = grupoResult.codigo === 'SIN_GRUPO' ? 404 : 500;
       return res.status(statusCode).json(grupoResult);
     }
-    
+
     const { grupo } = grupoResult;
-    
+
     // Calcular estadísticas
     const totalMiembros = grupo.miembros?.length || 0;
     const totalAdministradores = grupo.miembros?.filter(m => m.rol_en_grupo === 'admin').length || 0;
     const totalResponsables = grupo.miembros?.filter(m => m.rol_en_grupo === 'responsable').length || 0;
-    
+
     // Calcular distribución por parentesco
     const parentescos = {};
     if (grupo.miembros) {
@@ -497,7 +498,7 @@ router.post('/resumen-grupo', async (req, res) => {
         parentescos[parentesco]++;
       });
     }
-    
+
     // Calcular distribución por género
     const generos = {};
     if (grupo.miembros) {
@@ -509,13 +510,13 @@ router.post('/resumen-grupo', async (req, res) => {
         generos[genero]++;
       });
     }
-    
+
     // Obtener actividad reciente (últimos 7 días)
     let actividadReciente = [];
     try {
       const sieteDiasAtras = new Date();
       sieteDiasAtras.setDate(sieteDiasAtras.getDate() - 7);
-      
+
       // Aquí podrías consultar actividades reales del grupo
       // Por ahora, creamos datos de ejemplo
       actividadReciente = [
@@ -529,7 +530,7 @@ router.post('/resumen-grupo', async (req, res) => {
     } catch (error) {
       console.log('⚠️ No se pudieron obtener actividades recientes');
     }
-    
+
     const resumen = {
       estadisticas: {
         total_miembros: totalMiembros,
@@ -544,12 +545,12 @@ router.post('/resumen-grupo', async (req, res) => {
       capacidad_grupo: {
         actual: totalMiembros,
         maximo: grupo.max_integrantes,
-        porcentaje_ocupado: grupo.max_integrantes > 0 
-          ? Math.round((totalMiembros / grupo.max_integrantes) * 100) 
+        porcentaje_ocupado: grupo.max_integrantes > 0
+          ? Math.round((totalMiembros / grupo.max_integrantes) * 100)
           : 0
       }
     };
-    
+
     res.status(200).json({
       exito: true,
       resumen,
@@ -559,7 +560,7 @@ router.post('/resumen-grupo', async (req, res) => {
         fecha_expiracion: grupo.fecha_expiracion
       }
     });
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /resumen-grupo:', error.message);
     res.status(500).json({
@@ -574,10 +575,10 @@ router.post('/resumen-grupo', async (req, res) => {
  * 14. Verificar permisos del usuario en el grupo
  * POST /api/familia/verificar-permisos
  */
-router.post('/verificar-permisos', async (req, res) => {
+router.post('/verificar-permisos', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, permisos_requeridos } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -585,19 +586,19 @@ router.post('/verificar-permisos', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     // Obtener grupo del usuario
     const grupoResult = await familiaControlador.obtenerGrupoFamiliar(usuario_id);
-    
+
     if (!grupoResult.exito) {
       return res.status(404).json(grupoResult);
     }
-    
+
     const { grupo } = grupoResult;
-    
+
     // Buscar al usuario en los miembros del grupo
     const usuarioEnGrupo = grupo.miembros?.find(m => m.id === usuario_id);
-    
+
     if (!usuarioEnGrupo) {
       return res.status(403).json({
         exito: false,
@@ -605,15 +606,15 @@ router.post('/verificar-permisos', async (req, res) => {
         codigo: 'USUARIO_NO_ENCONTRADO'
       });
     }
-    
+
     // Verificar permisos específicos si se requieren
     let tienePermisos = true;
     const permisosVerificados = {};
-    
+
     if (permisos_requeridos && Array.isArray(permisos_requeridos)) {
       permisos_requeridos.forEach(permiso => {
         let tienePermiso = false;
-        
+
         switch (permiso) {
           case 'administrar_grupo':
             tienePermiso = usuarioEnGrupo.rol_en_grupo === 'admin';
@@ -633,12 +634,12 @@ router.post('/verificar-permisos', async (req, res) => {
           default:
             tienePermiso = false;
         }
-        
+
         permisosVerificados[permiso] = tienePermiso;
         if (!tienePermiso) tienePermisos = false;
       });
     }
-    
+
     res.status(200).json({
       exito: true,
       permisos: permisosVerificados,
@@ -654,7 +655,7 @@ router.post('/verificar-permisos', async (req, res) => {
         nombre: grupo.nombre_grupo
       }
     });
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /verificar-permisos:', error.message);
     res.status(500).json({
@@ -669,10 +670,10 @@ router.post('/verificar-permisos', async (req, res) => {
  * 15. Exportar información del grupo familiar
  * POST /api/familia/exportar-grupo
  */
-router.post('/exportar-grupo', async (req, res) => {
+router.post('/exportar-grupo', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, formato } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -680,20 +681,20 @@ router.post('/exportar-grupo', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     // Obtener información completa del grupo
     const grupoResult = await familiaControlador.obtenerGrupoFamiliar(usuario_id);
-    
+
     if (!grupoResult.exito) {
       return res.status(404).json(grupoResult);
     }
-    
+
     const { grupo } = grupoResult;
-    
+
     // Obtener adulto mayor si existe
     const adultoMayorResult = await familiaControlador.obtenerAdultoMayor(usuario_id);
     const adultoMayor = adultoMayorResult.exito ? adultoMayorResult.adulto_mayor : null;
-    
+
     // Preparar datos para exportación
     const datosExportacion = {
       grupo: {
@@ -734,9 +735,9 @@ router.post('/exportar-grupo', async (req, res) => {
         fecha_generacion: new Date().toISOString()
       }
     };
-    
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    
+
     res.status(200).json({
       exito: true,
       datos: datosExportacion,
@@ -744,7 +745,7 @@ router.post('/exportar-grupo', async (req, res) => {
       nombre_archivo: `grupo_familiar_${timestamp}.${formato || 'json'}`,
       mensaje: 'Datos del grupo listos para exportación'
     });
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /exportar-grupo:', error.message);
     res.status(500).json({
@@ -759,10 +760,10 @@ router.post('/exportar-grupo', async (req, res) => {
  * 16. Sincronizar datos del grupo familiar
  * POST /api/familia/sincronizar
  */
-router.post('/sincronizar', async (req, res) => {
+router.post('/sincronizar', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, datos_sincronizacion } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -770,19 +771,19 @@ router.post('/sincronizar', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     console.log('🔄 Sincronizando grupo familiar para usuario:', usuario_id);
-    
+
     // Aquí implementarías la lógica de sincronización
     // Por ahora, devolvemos un estado básico
-    
+
     res.status(200).json({
       exito: true,
       sincronizado_en: new Date().toISOString(),
       cambios_aplicados: 0,
       mensaje: 'Sincronización del grupo familiar completada (modo de demostración)'
     });
-    
+
   } catch (error) {
     console.error('❌ Error en ruta /sincronizar:', error.message);
     res.status(500).json({

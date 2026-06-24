@@ -1,6 +1,7 @@
 // rutas/rutasAutenticacion.js
 import express from 'express';
 import authControlador from '../controladores/autenticacionControlador.js';
+import { autenticarUsuario, verificarRol, verificarGrupo } from '../middleware/autenticacionMiddleware.js';
 
 const router = express.Router();
 
@@ -12,7 +13,7 @@ router.use((req, res, next) => {
     'PUT': '✏️',
     'DELETE': '🗑️'
   }[req.method] || '🔍';
-  
+
   console.log(`${emoji} [AUTH] ${req.method} ${req.originalUrl}`);
   next();
 });
@@ -27,7 +28,7 @@ router.use((req, res, next) => {
 router.post('/login', async (req, res) => {
   try {
     const { identificador, contrasena } = req.body;
-    
+
     if (!identificador || !contrasena) {
       return res.status(400).json({
         exito: false,
@@ -35,19 +36,19 @@ router.post('/login', async (req, res) => {
         codigo: 'CREDENCIALES_INCOMPLETAS'
       });
     }
-    
+
     const resultado = await authControlador.iniciarSesion(identificador, contrasena);
-    
+
     if (!resultado.exito) {
-      const statusCode = 
-        resultado.codigo === 'USUARIO_NO_ENCONTRADO' || 
-        resultado.codigo === 'CONTRASENA_INCORRECTA' ? 401 : 400;
-      
+      const statusCode =
+        resultado.codigo === 'USUARIO_NO_ENCONTRADO' ||
+          resultado.codigo === 'CONTRASENA_INCORRECTA' ? 401 : 400;
+
       return res.status(statusCode).json(resultado);
     }
-    
+
     return res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en POST /api/auth/login:', error);
     return res.status(500).json({
@@ -66,7 +67,7 @@ router.post('/login', async (req, res) => {
 router.post('/login-codigo-familiar', async (req, res) => {
   try {
     const { email, contrasena, codigo_familiar } = req.body;
-    
+
     if (!email || !contrasena || !codigo_familiar) {
       return res.status(400).json({
         exito: false,
@@ -74,24 +75,24 @@ router.post('/login-codigo-familiar', async (req, res) => {
         codigo: 'CREDENCIALES_INCOMPLETAS'
       });
     }
-    
+
     const resultado = await authControlador.iniciarSesionConCodigoFamiliar(
-      email, 
-      contrasena, 
+      email,
+      contrasena,
       codigo_familiar
     );
-    
+
     if (!resultado.exito) {
-      const statusCode = 
-        resultado.codigo === 'CODIGO_FAMILIAR_INVALIDO' || 
-        resultado.codigo === 'GRUPO_LLENO' || 
-        resultado.codigo === 'YA_EN_GRUPO' ? 400 : 401;
-      
+      const statusCode =
+        resultado.codigo === 'CODIGO_FAMILIAR_INVALIDO' ||
+          resultado.codigo === 'GRUPO_LLENO' ||
+          resultado.codigo === 'YA_EN_GRUPO' ? 400 : 401;
+
       return res.status(statusCode).json(resultado);
     }
-    
+
     return res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en POST /api/auth/login-codigo-familiar:', error);
     return res.status(500).json({
@@ -110,7 +111,7 @@ router.post('/login-codigo-familiar', async (req, res) => {
 router.post('/login-codigo-personalizado', async (req, res) => {
   try {
     const { codigo_personalizado } = req.body;
-    
+
     if (!codigo_personalizado) {
       return res.status(400).json({
         exito: false,
@@ -118,16 +119,16 @@ router.post('/login-codigo-personalizado', async (req, res) => {
         codigo: 'CODIGO_REQUERIDO'
       });
     }
-    
+
     const resultado = await authControlador.iniciarSesionConCodigoPersonalizado(codigo_personalizado);
-    
+
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'CODIGO_NO_ENCONTRADO' ? 404 : 400;
       return res.status(statusCode).json(resultado);
     }
-    
+
     return res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en POST /api/auth/login-codigo-personalizado:', error);
     return res.status(500).json({
@@ -146,7 +147,7 @@ router.post('/login-codigo-personalizado', async (req, res) => {
 router.post('/completar-perfil', async (req, res) => {
   try {
     const { usuario_id, ...datosPerfil } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -154,15 +155,15 @@ router.post('/completar-perfil', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await authControlador.completarPerfilConCodigo(usuario_id, datosPerfil);
-    
+
     if (!resultado.exito) {
       return res.status(400).json(resultado);
     }
-    
+
     return res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en POST /api/auth/completar-perfil:', error);
     return res.status(500).json({
@@ -183,7 +184,7 @@ router.post('/completar-perfil', async (req, res) => {
 router.post('/registro', async (req, res) => {
   try {
     const datosUsuario = req.body;
-    
+
     if (!datosUsuario.email || !datosUsuario.password || !datosUsuario.nombre) {
       return res.status(400).json({
         exito: false,
@@ -191,19 +192,19 @@ router.post('/registro', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await authControlador.registrarUsuario(datosUsuario);
-    
+
     if (!resultado.exito) {
-      const statusCode = 
-        resultado.codigo === 'EMAIL_EXISTENTE' || 
-        resultado.codigo === 'USERNAME_EXISTENTE' ? 409 : 400;
-      
+      const statusCode =
+        resultado.codigo === 'EMAIL_EXISTENTE' ||
+          resultado.codigo === 'USERNAME_EXISTENTE' ? 409 : 400;
+
       return res.status(statusCode).json(resultado);
     }
-    
+
     return res.status(201).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en POST /api/auth/registro:', error);
     return res.status(500).json({
@@ -224,7 +225,7 @@ router.post('/registro', async (req, res) => {
 router.post('/recuperar-contrasena/solicitar', async (req, res) => {
   try {
     const { email } = req.body;
-    
+
     if (!email) {
       return res.status(400).json({
         exito: false,
@@ -232,15 +233,15 @@ router.post('/recuperar-contrasena/solicitar', async (req, res) => {
         codigo: 'EMAIL_REQUERIDO'
       });
     }
-    
+
     const resultado = await authControlador.solicitarRecuperacionContrasena(email);
-    
+
     if (!resultado.exito) {
       return res.status(400).json(resultado);
     }
-    
+
     return res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en POST /api/auth/recuperar-contrasena/solicitar:', error);
     return res.status(500).json({
@@ -259,7 +260,7 @@ router.post('/recuperar-contrasena/solicitar', async (req, res) => {
 router.post('/recuperar-contrasena/verificar', async (req, res) => {
   try {
     const { usuario_id, codigo } = req.body;
-    
+
     if (!usuario_id || !codigo) {
       return res.status(400).json({
         exito: false,
@@ -267,15 +268,15 @@ router.post('/recuperar-contrasena/verificar', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await authControlador.verificarCodigoRecuperacion(usuario_id, codigo);
-    
+
     if (!resultado.exito) {
       return res.status(400).json(resultado);
     }
-    
+
     return res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en POST /api/auth/recuperar-contrasena/verificar:', error);
     return res.status(500).json({
@@ -294,7 +295,7 @@ router.post('/recuperar-contrasena/verificar', async (req, res) => {
 router.post('/recuperar-contrasena/restablecer', async (req, res) => {
   try {
     const { usuario_id, codigo_id, nueva_contrasena } = req.body;
-    
+
     if (!usuario_id || !codigo_id || !nueva_contrasena) {
       return res.status(400).json({
         exito: false,
@@ -302,19 +303,19 @@ router.post('/recuperar-contrasena/restablecer', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await authControlador.restablecerContrasena(
-      usuario_id, 
-      codigo_id, 
+      usuario_id,
+      codigo_id,
       nueva_contrasena
     );
-    
+
     if (!resultado.exito) {
       return res.status(400).json(resultado);
     }
-    
+
     return res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en POST /api/auth/recuperar-contrasena/restablecer:', error);
     return res.status(500).json({
@@ -335,7 +336,7 @@ router.post('/recuperar-contrasena/restablecer', async (req, res) => {
 router.post('/verificar', async (req, res) => {
   try {
     const { token } = req.body;
-    
+
     if (!token) {
       return res.status(400).json({
         exito: false,
@@ -343,19 +344,19 @@ router.post('/verificar', async (req, res) => {
         codigo: 'TOKEN_REQUERIDO'
       });
     }
-    
+
     const resultado = await authControlador.verificarToken(token);
-    
+
     if (!resultado.exito) {
-      const statusCode = 
-        resultado.codigo === 'TOKEN_EXPIRADO' || 
-        resultado.codigo === 'TOKEN_INVALIDO' ? 401 : 400;
-      
+      const statusCode =
+        resultado.codigo === 'TOKEN_EXPIRADO' ||
+          resultado.codigo === 'TOKEN_INVALIDO' ? 401 : 400;
+
       return res.status(statusCode).json(resultado);
     }
-    
+
     return res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en POST /api/auth/verificar:', error);
     return res.status(500).json({
@@ -371,10 +372,10 @@ router.post('/verificar', async (req, res) => {
  * @desc Verificar token JWT desde headers (para frontend)
  * @access Privado (requiere token en Authorization header)
  */
-router.get('/verificar-token', async (req, res) => {
+router.get('/verificar-token', autenticarUsuario, async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
         exito: false,
@@ -382,16 +383,16 @@ router.get('/verificar-token', async (req, res) => {
         codigo: 'TOKEN_NO_PROVIDED'
       });
     }
-    
+
     const token = authHeader.split(' ')[1];
     const resultado = await authControlador.verificarToken(token);
-    
+
     if (!resultado.exito) {
       return res.status(401).json(resultado);
     }
-    
+
     return res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en GET /api/auth/verificar-token:', error);
     return res.status(500).json({
@@ -407,10 +408,10 @@ router.get('/verificar-token', async (req, res) => {
  * @desc Cerrar sesión (lado del servidor)
  * @access Privado (requiere token)
  */
-router.post('/cerrar-sesion', async (req, res) => {
+router.post('/cerrar-sesion', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-    
+
     if (!usuario_id) {
       return res.status(400).json({
         exito: false,
@@ -418,15 +419,15 @@ router.post('/cerrar-sesion', async (req, res) => {
         codigo: 'USUARIO_ID_REQUERIDO'
       });
     }
-    
+
     const resultado = await authControlador.cerrarSesion(usuario_id);
-    
+
     if (!resultado.exito) {
       return res.status(400).json(resultado);
     }
-    
+
     return res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en POST /api/auth/cerrar-sesion:', error);
     return res.status(500).json({
@@ -442,10 +443,10 @@ router.post('/cerrar-sesion', async (req, res) => {
  * @desc Cambiar contraseña (para usuarios autenticados)
  * @access Privado (requiere token)
  */
-router.post('/cambiar-contrasena', async (req, res) => {
+router.post('/cambiar-contrasena', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, contrasena_actual, nueva_contrasena } = req.body;
-    
+
     if (!usuario_id || !contrasena_actual || !nueva_contrasena) {
       return res.status(400).json({
         exito: false,
@@ -453,22 +454,22 @@ router.post('/cambiar-contrasena', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await authControlador.cambiarContrasena(
-      usuario_id, 
-      contrasena_actual, 
+      usuario_id,
+      contrasena_actual,
       nueva_contrasena
     );
-    
+
     if (!resultado.exito) {
-      const statusCode = 
+      const statusCode =
         resultado.codigo === 'CONTRASENA_ACTUAL_INCORRECTA' ? 401 : 400;
-      
+
       return res.status(statusCode).json(resultado);
     }
-    
+
     return res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en POST /api/auth/cambiar-contrasena:', error);
     return res.status(500).json({
@@ -487,7 +488,7 @@ router.post('/cambiar-contrasena', async (req, res) => {
 router.get('/verificar-disponibilidad', async (req, res) => {
   try {
     const { email, username } = req.query;
-    
+
     // Al menos uno debe estar presente
     if (!email && !username) {
       return res.status(400).json({
@@ -496,15 +497,15 @@ router.get('/verificar-disponibilidad', async (req, res) => {
         codigo: 'DATOS_INCOMPLETOS'
       });
     }
-    
+
     const resultado = await authControlador.verificarDisponibilidadUsuario(email, username);
-    
+
     if (!resultado.exito) {
       return res.status(400).json(resultado);
     }
-    
+
     return res.status(200).json(resultado);
-    
+
   } catch (error) {
     console.error('❌ Error en GET /api/auth/verificar-disponibilidad:', error);
     return res.status(500).json({
@@ -660,7 +661,7 @@ router.get('/rutas', (req, res) => {
 // ==================== MIDDLEWARE DE ERRORES ====================
 router.use((err, req, res, next) => {
   console.error('🔥 Error en rutas de autenticación:', err);
-  
+
   res.status(err.status || 500).json({
     exito: false,
     error: err.message || 'Error interno del servidor',

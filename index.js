@@ -1,10 +1,13 @@
 // index.js - API BACKEND PARA CUIDAME
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { verificarConexionDB } from './configuracion/basedeDatos.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { autenticarUsuario } from './middleware/autenticacionMiddleware.js';
+
 
 // ========== 1. CONFIGURACIÓN DE DIRECTORIOS ==========
 const __filename = fileURLToPath(import.meta.url);
@@ -45,7 +48,9 @@ console.log('\n🔗 IMPORTANDO RUTAS DE LA API...');
 
 // Importar todas las rutas necesarias
 import rutasAutenticacion from './rutas/rutasAutenticacion.js';
-import rutasUsuario from './rutas/rutasUsuario.js';
+import rutasUsuarioProfesional from './rutas/rutasUsuarioProfesional.js';
+import rutasUsuarioFamiliar from './rutas/rutasUsuarioFamiliar.js';
+import rutasUsuarioAnciano from './rutas/rutasUsuarioAnciano.js';
 import rutasGastos from './rutas/rutasGastos.js';
 import rutasMedicinas from './rutas/rutasMedicinas.js';
 import rutasCalendario from './rutas/rutasCalendario.js'; // Cambiado de rutasEventos
@@ -62,12 +67,12 @@ const PORT = process.env.PORT || 3000;
 
 // Configuración CORS para CuidaMe
 app.use(cors({
-  origin: function(origin, callback) {
+  origin: function (origin, callback) {
     // Permitir todos los orígenes en desarrollo
     if (!origin || process.env.NODE_ENV === 'development') {
       return callback(null, true);
     }
-    
+
     // Lista de orígenes permitidos en producción
     const allowedOrigins = [
       'https://cuidame-app.com',
@@ -76,7 +81,7 @@ app.use(cors({
       'http://localhost:19006',
       'exp://192.168.1.*:19000'
     ];
-    
+
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
@@ -87,9 +92,9 @@ app.use(cors({
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'Accept', 
+    'Content-Type',
+    'Authorization',
+    'Accept',
     'X-Requested-With',
     'X-Auth-Token',
     'Origin'
@@ -99,24 +104,24 @@ app.use(cors({
 }));
 
 // Middleware para parsear JSON
-app.use(express.json({ 
+app.use(express.json({
   limit: '10mb',
   verify: (req, res, buf) => {
     try {
       JSON.parse(buf.toString());
     } catch (e) {
-      res.status(400).json({ 
-        exito: false, 
+      res.status(400).json({
+        exito: false,
         error: 'JSON inválido',
-        codigo: 'JSON_INVALIDO' 
+        codigo: 'JSON_INVALIDO'
       });
       throw new Error('JSON inválido');
     }
   }
 }));
 
-app.use(express.urlencoded({ 
-  extended: true, 
+app.use(express.urlencoded({
+  extended: true,
   limit: '10mb',
   parameterLimit: 10000
 }));
@@ -134,13 +139,13 @@ app.use((req, res, next) => {
     'PATCH': '🔧',
     'OPTIONS': '🔍'
   }[req.method] || '❓';
-  
+
   console.log(`${emoji} [${datePart} ${timePart}] ${req.method} ${req.originalUrl} - IP: ${req.ip}`);
-  
+
   // Log del cuerpo para desarrollo (excluyendo datos sensibles)
   if (process.env.NODE_ENV === 'development' && req.body && Object.keys(req.body).length > 0) {
     const logBody = { ...req.body };
-    
+
     // Ocultar datos sensibles
     const sensitiveFields = ['contrasena', 'password', 'token', 'access_token', 'refresh_token', 'codigo'];
     sensitiveFields.forEach(field => {
@@ -148,10 +153,10 @@ app.use((req, res, next) => {
         logBody[field] = '***OCULTO***';
       }
     });
-    
+
     console.log('📝 Cuerpo de la petición:', JSON.stringify(logBody, null, 2));
   }
-  
+
   next();
 });
 
@@ -159,8 +164,8 @@ app.use((req, res, next) => {
 
 // Ruta de prueba básica
 app.get('/test', (req, res) => {
-  res.json({ 
-    exito: true, 
+  res.json({
+    exito: true,
     mensaje: 'API CuidaMe funcionando correctamente',
     timestamp: new Date().toISOString(),
     version: '1.0.0',
@@ -175,7 +180,7 @@ app.get('/health', async (req, res) => {
     const dbStatus = await verificarConexionDB(3);
     const memoryUsage = process.memoryUsage();
     const uptime = process.uptime();
-    
+
     res.json({
       estado: 'saludable',
       servicio: 'api-cuidame',
@@ -199,10 +204,10 @@ app.get('/health', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error en endpoint /health:', error);
-    res.status(500).json({ 
-      exito: false, 
+    res.status(500).json({
+      exito: false,
       error: 'Error al verificar salud del sistema',
-      codigo: 'ERROR_SALUD' 
+      codigo: 'ERROR_SALUD'
     });
   }
 });
@@ -337,10 +342,6 @@ console.log('\n🔧 MONTANDO RUTAS DE LA API...');
 app.use('/api/auth', rutasAutenticacion);
 console.log('✅ Rutas montadas en /api/auth');
 
-// Usuarios
-app.use('/api/usuario', rutasUsuario);
-console.log('✅ Rutas montadas en /api/usuario');
-
 // Información del adulto mayor
 app.use('/api/info-adulto', rutasInfoAdulto);
 console.log('✅ Rutas montadas en /api/info-adulto');
@@ -369,6 +370,16 @@ console.log('✅ Rutas montadas en /api/familia');
 app.use('/api/preferencias', rutasPreferencias);
 console.log('✅ Rutas montadas en /api/preferencias');
 
+// Preferencias
+app.use('/api/usuarioFamiliar', rutasUsuarioFamiliar);
+console.log('✅ Rutas montadas en /api/usuarioFamiliar');
+
+app.use('/api/usuarioProfesional', rutasUsuarioProfesional);
+console.log('✅ Rutas montadas en /api/usuarioProfesional');
+
+app.use('/api/usuarioAnciano', rutasUsuarioAnciano);
+console.log('✅ Rutas montadas en /api/usuarioAnciano');
+
 // ========== 8. SERVIR ARCHIVOS ESTÁTICOS ==========
 const directoriosEstaticos = [
   { path: 'uploads', endpoint: '/uploads' },
@@ -389,7 +400,7 @@ directoriosEstaticos.forEach(dir => {
 // ========== 9. MIDDLEWARE PARA ERRORES 404 ==========
 app.use((req, res, next) => {
   console.log(`❌ 404 - Ruta no encontrada: ${req.method} ${req.originalUrl}`);
-  
+
   res.status(404).json({
     exito: false,
     error: 'Ruta no encontrada',
@@ -429,7 +440,7 @@ app.use((err, req, res, next) => {
     ip: req.ip,
     userAgent: req.get('User-Agent')
   });
-  
+
   // Errores de validación de JSON
   if (err.message === 'JSON inválido') {
     return res.status(400).json({
@@ -439,7 +450,7 @@ app.use((err, req, res, next) => {
       sugerencia: 'Verifica el formato JSON de tu petición'
     });
   }
-  
+
   // Errores de CORS
   if (err.message === 'Origen no permitido por CORS') {
     return res.status(403).json({
@@ -449,7 +460,7 @@ app.use((err, req, res, next) => {
       origen_solicitado: req.get('Origin')
     });
   }
-  
+
   // Error genérico
   const statusCode = err.statusCode || err.status || 500;
   const respuestaError = {
@@ -457,18 +468,18 @@ app.use((err, req, res, next) => {
     error: process.env.NODE_ENV === 'development' ? err.message : 'Error interno del servidor',
     codigo: err.code || 'ERROR_INTERNO'
   };
-  
+
   // Agregar detalles en desarrollo
   if (process.env.NODE_ENV === 'development' && err.stack) {
     respuestaError.stack = err.stack;
   }
-  
+
   // Agregar ID de error para tracking
   const errorId = Date.now().toString(36) + Math.random().toString(36).substr(2);
   respuestaError.error_id = errorId;
-  
+
   console.error(`📋 Error ID: ${errorId}`);
-  
+
   res.status(statusCode).json(respuestaError);
 });
 
@@ -477,11 +488,11 @@ const iniciarServidor = async () => {
   try {
     console.log('\n🔗 VERIFICANDO CONEXIÓN A BASE DE DATOS...');
     const dbStatus = await verificarConexionDB(3);
-    
+
     if (!dbStatus.connected) {
       console.error('❌ ERROR CRÍTICO: No se pudo conectar a la base de datos');
       console.error('   Detalles:', dbStatus.error);
-      
+
       // En desarrollo, podemos continuar sin BD para pruebas
       if (process.env.NODE_ENV === 'development') {
         console.warn('⚠️  Modo desarrollo: Continuando sin conexión a BD (pruebas)');
@@ -489,7 +500,7 @@ const iniciarServidor = async () => {
         throw new Error('Conexión a base de datos fallida');
       }
     }
-    
+
     app.listen(PORT, '0.0.0.0', () => {
       console.log('\n' + '='.repeat(70));
       console.log('🎉 API CUIDAME INICIADA CORRECTAMENTE');
@@ -498,7 +509,7 @@ const iniciarServidor = async () => {
       console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🔗 URL Base: http://localhost:${PORT}`);
       console.log(`🗄️  Base de datos: ${dbStatus.connected ? '✅ Conectada' : '❌ Desconectada'}`);
-      
+
       console.log('\n📡 ENDPOINTS PRINCIPALES:');
       console.log(`   🏓  GET  /test          - Prueba de conexión`);
       console.log(`   🩺  GET  /health        - Estado del sistema`);
@@ -516,18 +527,18 @@ const iniciarServidor = async () => {
       console.log('   • En desarrollo, se muestran los cuerpos de las peticiones (sin datos sensibles)');
       console.log('='.repeat(70));
     });
-    
+
     // Manejo de señales para apagado elegante
     process.on('SIGTERM', () => {
       console.log('\n🛑 Recibida señal SIGTERM. Apagando servidor...');
       process.exit(0);
     });
-    
+
     process.on('SIGINT', () => {
       console.log('\n🛑 Recibida señal SIGINT (Ctrl+C). Apagando servidor...');
       process.exit(0);
     });
-    
+
   } catch (error) {
     console.error('❌ ERROR AL INICIAR EL SERVIDOR:', error.message);
     console.error('Stack:', error.stack);
