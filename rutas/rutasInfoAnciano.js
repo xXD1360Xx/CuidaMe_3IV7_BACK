@@ -1,6 +1,6 @@
-// rutas/infoAdultoRutas.js - Rutas para Información del Adulto Mayor
+// rutas/infoAncianoRutas.js - Rutas para Información del Adulto Mayor
 import express from 'express';
-import infoAdultoControlador from '../controladores/infoAdultoControlador.js';
+import infoAncianoControlador from '../controladores/infoAncianoControlador.js';
 import { autenticarUsuario, verificarRol, verificarGrupo } from '../middleware/autenticacionMiddleware.js';
 
 const router = express.Router();
@@ -23,7 +23,7 @@ router.post('/principal', autenticarUsuario, async (req, res) => {
       });
     }
 
-    const resultado = await infoAdultoControlador.obtenerAdultoMayorPrincipal(usuario_id);
+    const resultado = await infoAncianoControlador.obtenerAdultoMayorPrincipal(usuario_id);
 
     if (!resultado.exito) {
       return res.status(400).json(resultado);
@@ -65,7 +65,7 @@ router.post('/actualizar', autenticarUsuario, async (req, res) => {
       });
     }
 
-    const resultado = await infoAdultoControlador.actualizarAdultoMayor(
+    const resultado = await infoAncianoControlador.actualizarAdultoMayor(
       adulto_id,
       usuario_id,
       datos
@@ -104,7 +104,7 @@ router.post('/estadisticas', autenticarUsuario, async (req, res) => {
       });
     }
 
-    const resultado = await infoAdultoControlador.obtenerEstadisticasSalud(
+    const resultado = await infoAncianoControlador.obtenerEstadisticasSalud(
       adulto_id,
       usuario_id
     );
@@ -142,7 +142,7 @@ router.post('/generar-reporte', autenticarUsuario, async (req, res) => {
       });
     }
 
-    const resultado = await infoAdultoControlador.generarReporteSalud(
+    const resultado = await infoAncianoControlador.generarReporteSalud(
       adulto_id,
       usuario_id,
       tipo || 'completo'
@@ -183,7 +183,7 @@ router.post('/enfermedades', autenticarUsuario, async (req, res) => {
       });
     }
 
-    const resultado = await infoAdultoControlador.obtenerEnfermedades(adulto_id);
+    const resultado = await infoAncianoControlador.obtenerEnfermedades(adulto_id);
 
     res.status(200).json(resultado);
 
@@ -213,7 +213,7 @@ router.post('/enfermedades/agregar', autenticarUsuario, async (req, res) => {
       });
     }
 
-    const resultado = await infoAdultoControlador.agregarEnfermedad(
+    const resultado = await infoAncianoControlador.agregarEnfermedad(
       adulto_id,
       usuario_id,
       enfermedad
@@ -260,7 +260,7 @@ router.post('/enfermedades/actualizar', autenticarUsuario, async (req, res) => {
       });
     }
 
-    const resultado = await infoAdultoControlador.actualizarEnfermedad(
+    const resultado = await infoAncianoControlador.actualizarEnfermedad(
       enfermedad_id,
       usuario_id,
       datos
@@ -299,7 +299,7 @@ router.post('/enfermedades/eliminar', autenticarUsuario, async (req, res) => {
       });
     }
 
-    const resultado = await infoAdultoControlador.eliminarEnfermedad(
+    const resultado = await infoAncianoControlador.eliminarEnfermedad(
       enfermedad_id,
       usuario_id
     );
@@ -339,7 +339,7 @@ router.post('/alergias', autenticarUsuario, async (req, res) => {
       });
     }
 
-    const resultado = await infoAdultoControlador.obtenerAlergias(adulto_id);
+    const resultado = await infoAncianoControlador.obtenerAlergias(adulto_id);
 
     res.status(200).json(resultado);
 
@@ -369,7 +369,7 @@ router.post('/alergias/agregar', autenticarUsuario, async (req, res) => {
       });
     }
 
-    const resultado = await infoAdultoControlador.agregarAlergia(
+    const resultado = await infoAncianoControlador.agregarAlergia(
       adulto_id,
       usuario_id,
       alergia
@@ -410,7 +410,7 @@ router.post('/articulos', autenticarUsuario, async (req, res) => {
       });
     }
 
-    const resultado = await infoAdultoControlador.obtenerArticulos(adulto_id);
+    const resultado = await infoAncianoControlador.obtenerArticulos(adulto_id);
 
     res.status(200).json(resultado);
 
@@ -440,7 +440,7 @@ router.post('/articulos/agregar', autenticarUsuario, async (req, res) => {
       });
     }
 
-    const resultado = await infoAdultoControlador.agregarArticulo(
+    const resultado = await infoAncianoControlador.agregarArticulo(
       adulto_id,
       usuario_id,
       articulo
@@ -481,7 +481,7 @@ router.post('/hobbies', autenticarUsuario, async (req, res) => {
       });
     }
 
-    const resultado = await infoAdultoControlador.obtenerHobbies(adulto_id);
+    const resultado = await infoAncianoControlador.obtenerHobbies(adulto_id);
 
     res.status(200).json(resultado);
 
@@ -511,7 +511,7 @@ router.post('/hobbies/agregar', autenticarUsuario, async (req, res) => {
       });
     }
 
-    const resultado = await infoAdultoControlador.agregarHobby(
+    const resultado = await infoAncianoControlador.agregarHobby(
       adulto_id,
       usuario_id,
       hobby
@@ -553,7 +553,7 @@ router.post('/completa', autenticarUsuario, async (req, res) => {
     }
 
     // Obtener información principal
-    const principalResult = await infoAdultoControlador.obtenerAdultoMayorPrincipal(usuario_id);
+    const principalResult = await infoAncianoControlador.obtenerAdultoMayorPrincipal(usuario_id);
 
     if (!principalResult.exito || !principalResult.adultoMayor) {
       return res.status(400).json(principalResult);
@@ -568,10 +568,10 @@ router.post('/completa', autenticarUsuario, async (req, res) => {
       articulosResult,
       hobbiesResult
     ] = await Promise.all([
-      infoAdultoControlador.obtenerEnfermedades(adultoId),
-      infoAdultoControlador.obtenerAlergias(adultoId),
-      infoAdultoControlador.obtenerArticulos(adultoId),
-      infoAdultoControlador.obtenerHobbies(adultoId)
+      infoAncianoControlador.obtenerEnfermedades(adultoId),
+      infoAncianoControlador.obtenerAlergias(adultoId),
+      infoAncianoControlador.obtenerArticulos(adultoId),
+      infoAncianoControlador.obtenerHobbies(adultoId)
     ]);
 
     // Combinar toda la información
@@ -616,7 +616,7 @@ router.post('/resumen-salud', autenticarUsuario, async (req, res) => {
     }
 
     // Obtener estadísticas
-    const estadisticasResult = await infoAdultoControlador.obtenerEstadisticasSalud(
+    const estadisticasResult = await infoAncianoControlador.obtenerEstadisticasSalud(
       adulto_id,
       usuario_id
     );
@@ -632,9 +632,9 @@ router.post('/resumen-salud', autenticarUsuario, async (req, res) => {
       alergiasResult,
       articulosResult
     ] = await Promise.all([
-      infoAdultoControlador.obtenerEnfermedades(adulto_id),
-      infoAdultoControlador.obtenerAlergias(adulto_id),
-      infoAdultoControlador.obtenerArticulos(adulto_id)
+      infoAncianoControlador.obtenerEnfermedades(adulto_id),
+      infoAncianoControlador.obtenerAlergias(adulto_id),
+      infoAncianoControlador.obtenerArticulos(adulto_id)
     ]);
 
     const resumenSalud = {
@@ -682,7 +682,7 @@ router.post('/exportar-pdf', autenticarUsuario, async (req, res) => {
     }
 
     // Obtener información completa
-    const resultado = await infoAdultoControlador.generarReporteSalud(
+    const resultado = await infoAncianoControlador.generarReporteSalud(
       adulto_id,
       usuario_id,
       tipo_exportacion || 'completo'
@@ -732,7 +732,7 @@ router.post('/sincronizar', autenticarUsuario, async (req, res) => {
     // Esta ruta sería útil para sincronización offline
     // Por ahora, solo verificamos permisos y devolvemos un mensaje
 
-    const resultado = await infoAdultoControlador.obtenerAdultoMayorPrincipal(usuario_id);
+    const resultado = await infoAncianoControlador.obtenerAdultoMayorPrincipal(usuario_id);
 
     if (!resultado.exito) {
       return res.status(400).json(resultado);
