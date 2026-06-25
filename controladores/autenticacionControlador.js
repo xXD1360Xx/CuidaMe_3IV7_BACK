@@ -857,15 +857,14 @@ export const registrarUsuario = async (datosUsuario) => {
       };
     }
 
+    // Procesar rol
     const rolesPermitidos = ['familiar_admin', 'familiar_secundario', 'familiar_principal', 'familiar', 'profesional', 'anciano'];
-    // Validar rol
     let rolFinal = rol;
     if (rolFinal === 'familiar_principal' || rolFinal === 'familiar') {
       rolFinal = 'familiar_admin';
     }
-    // Luego en la validación usamos rolFinal
     if (!rolesPermitidos.includes(rolFinal)) {
-      return { exito: false, error: `Rol no permitido...`, codigo: 'ROL_INVALIDO' };
+      return { exito: false, error: 'Rol no permitido', codigo: 'ROL_INVALIDO' };
     }
 
     client = await pool.connect();
@@ -934,14 +933,14 @@ export const registrarUsuario = async (datosUsuario) => {
       username ? username.trim() : null,
       passwordHash,
       telefono || null,
-      rolFinal
+      rolFinal   // ← IMPORTANTE: usar rolFinal aquí
     ]);
 
     const nuevoUsuario = result.rows[0];
+    let grupoId = null;  // ← DECLARAR grupoId AQUÍ
+    let grupoInfo = null;
 
     // Si se proporcionó código familiar, vincular al grupo
-    // Si se proporcionó código familiar, vincular al grupo
-    let grupoInfo = null;
     if (codigo_familiar) {
       const codigoLimpio = codigo_familiar.replace(/-/g, '').toUpperCase();
 
@@ -951,7 +950,7 @@ export const registrarUsuario = async (datosUsuario) => {
       `, [codigoLimpio]);
 
       if (grupoResult.rows.length > 0) {
-        const grupoId = grupoResult.rows[0].id;
+        grupoId = grupoResult.rows[0].id;  // ← ASIGNAR grupoId
 
         await client.query(`
           INSERT INTO usuario_grupo (
@@ -976,8 +975,7 @@ export const registrarUsuario = async (datosUsuario) => {
         }
       }
     } else {
-      // Si NO hay código familiar, CREAR GRUPO AUTOMÁTICAMENTE y asignar al usuario como ADMIN
-      // Generar código único de 6 caracteres
+      // Si NO hay código familiar, CREAR GRUPO AUTOMÁTICAMENTE
       const caracteres = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       let codigoGrupo;
       let codigoUnico = false;
@@ -1000,9 +998,8 @@ export const registrarUsuario = async (datosUsuario) => {
         throw new Error('No se pudo generar código único para el grupo');
       }
 
-      // Crear grupo
       const fechaExpiracion = new Date();
-      fechaExpiracion.setDate(fechaExpiracion.getDate() + 30); // 30 días de validez
+      fechaExpiracion.setDate(fechaExpiracion.getDate() + 30);
 
       const insertGrupo = await client.query(`
         INSERT INTO grupos_familiares (
@@ -1017,8 +1014,13 @@ export const registrarUsuario = async (datosUsuario) => {
       `, [codigoGrupo, `Familia ${nuevoUsuario.nombre}`, nuevoUsuario.id, fechaExpiracion]);
 
       const grupoCreado = insertGrupo.rows[0];
+      grupoId = grupoCreado.id;  // ← ASIGNAR grupoId
+      grupoInfo = {
+        codigo_familiar: grupoCreado.codigo_familiar,
+        nombre_grupo: grupoCreado.nombre_grupo,
+        admin_nombre: nuevoUsuario.nombre
+      };
 
-      // Asignar usuario al grupo como admin
       await client.query(`
         INSERT INTO usuario_grupo (
           usuario_id,
@@ -1027,13 +1029,7 @@ export const registrarUsuario = async (datosUsuario) => {
           estado,
           fecha_unio
         ) VALUES ($1, $2, 'admin', 'activo', NOW())
-      `, [nuevoUsuario.id, grupoCreado.id]);
-
-      grupoInfo = {
-        codigo_familiar: grupoCreado.codigo_familiar,
-        nombre_grupo: grupoCreado.nombre_grupo,
-        admin_nombre: nuevoUsuario.nombre
-      };
+      `, [nuevoUsuario.id, grupoId]);
     }
 
     // Generar token
@@ -1043,7 +1039,8 @@ export const registrarUsuario = async (datosUsuario) => {
         email: nuevoUsuario.email,
         nombre: nuevoUsuario.nombre,
         rol: nuevoUsuario.rol,
-        grupo_familiar_id: grupoInfo ? grupoId : null
+        grupo_familiar_id: grupoId,  // ← ahora grupoId está definido en ambos flujos
+        necesita_completar_perfil: nuevoUsuario.necesita_completar_perfil
       },
       JWT_SECRETO,
       { expiresIn: JWT_EXPIRES_IN }
