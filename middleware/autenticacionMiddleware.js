@@ -12,24 +12,24 @@ const JWT_SECRETO = process.env.JWT_SECRETO || 'cuidame_secret_key_2024_producci
 export const autenticarUsuario = async (req, res, next) => {
   try {
     console.log('🔐 [MIDDLEWARE] Verificando autenticación...');
-    
+    console.log('🔐 Headers recibidos:', req.headers.authorization);
+
     // 1. Obtener token de diferentes fuentes
     let token = obtenerTokenDeRequest(req);
-    
+
     if (!token) {
       console.error('❌ [MIDDLEWARE] Token no encontrado');
-      return responderErrorAutenticacion(res, 
+      return responderErrorAutenticacion(res,
         'Acceso denegado. Token de autenticación requerido.',
         'TOKEN_NO_ENCONTRADO',
         401
       );
     }
-    
     console.log('✅ [MIDDLEWARE] Token encontrado');
-    
+
     // 2. Verificar y decodificar token
     const usuarioDecodificado = await verificarYDecodificarToken(token);
-    
+
     if (!usuarioDecodificado) {
       return responderErrorAutenticacion(res,
         'Token inválido o expirado',
@@ -37,10 +37,10 @@ export const autenticarUsuario = async (req, res, next) => {
         401
       );
     }
-    
+
     // 3. Obtener información completa del usuario desde BD
     const usuarioCompleto = await obtenerInformacionUsuarioBD(usuarioDecodificado.id);
-    
+
     if (!usuarioCompleto) {
       return responderErrorAutenticacion(res,
         'Usuario no encontrado o inactivo',
@@ -48,17 +48,17 @@ export const autenticarUsuario = async (req, res, next) => {
         401
       );
     }
-    
+
     // 4. Adjuntar información del usuario a la request
     adjuntarUsuarioARequest(req, usuarioCompleto);
-    
+
     console.log(`👤 [MIDDLEWARE] Usuario autenticado: ${usuarioCompleto.nombre} (ID: ${usuarioCompleto.id}, Rol: ${usuarioCompleto.rol})`);
-    
+
     next();
-    
+
   } catch (error) {
     console.error('🔥 [MIDDLEWARE] Error en autenticación:', error.message);
-    
+
     if (error.name === 'JsonWebTokenError') {
       return responderErrorAutenticacion(res,
         'Token inválido o mal formado',
@@ -66,7 +66,7 @@ export const autenticarUsuario = async (req, res, next) => {
         401
       );
     }
-    
+
     if (error.name === 'TokenExpiredError') {
       return responderErrorAutenticacion(res,
         'Tu sesión ha expirado. Por favor, inicia sesión nuevamente.',
@@ -74,7 +74,7 @@ export const autenticarUsuario = async (req, res, next) => {
         401
       );
     }
-    
+
     return responderErrorAutenticacion(res,
       'Error en la autenticación',
       'ERROR_AUTENTICACION',
@@ -88,33 +88,33 @@ export const autenticarUsuario = async (req, res, next) => {
  */
 const obtenerTokenDeRequest = (req) => {
   let token = null;
-  
+
   // 1. Headers Authorization (estándar para React Native/Expo/APIs)
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.substring(7);
   }
-  
+
   // 2. Headers personalizados (alternativa)
   if (!token && req.headers['x-access-token']) {
     token = req.headers['x-access-token'];
   }
-  
+
   // 3. Query string (para debugging/testing)
   if (!token && req.query.token) {
     token = req.query.token;
   }
-  
+
   // 4. Cookies (para web)
   if (!token && req.cookies && req.cookies.token) {
     token = req.cookies.token;
   }
-  
+
   // 5. Body (último recurso, no recomendado para GET)
   if (!token && req.body && req.body.token) {
     token = req.body.token;
   }
-  
+
   return token;
 };
 
@@ -127,22 +127,22 @@ const verificarYDecodificarToken = async (token) => {
       console.error('❌ JWT_SECRETO no configurado en variables de entorno');
       return null;
     }
-    
+
     const decoded = jwt.verify(token, JWT_SECRETO);
-    
+
     // Verificar estructura mínima
     if (!decoded.id) {
       console.error('❌ Token no contiene ID de usuario');
       return null;
     }
-    
+
     return {
       id: decoded.id,
       email: decoded.email || null,
       nombre: decoded.nombre || null,
       rol: decoded.rol || 'usuario'
     };
-    
+
   } catch (error) {
     console.error('❌ Error verificando token:', error.message);
     throw error;
@@ -181,16 +181,16 @@ const obtenerInformacionUsuarioBD = async (usuarioId) => {
       WHERE u.id = $1 AND u.estado = 'activo'
       LIMIT 1
     `;
-    
+
     const result = await pool.query(query, [usuarioId]);
-    
+
     if (result.rows.length === 0) {
       console.log('❌ Usuario no encontrado o inactivo en BD');
       return null;
     }
-    
+
     return result.rows[0];
-    
+
   } catch (error) {
     console.error('❌ Error obteniendo usuario de BD:', error.message);
     return null;
@@ -207,30 +207,30 @@ const adjuntarUsuarioARequest = (req, usuario) => {
     nombre: usuario.nombre,
     email: usuario.email,
     rol: usuario.rol,
-    
+
     // Información adicional
     telefono: usuario.telefono,
     necesita_completar_perfil: usuario.necesita_completar_perfil,
     estado: usuario.estado,
     imagen_perfil: usuario.imagen_perfil,
-    
+
     // Preferencias
     notificaciones_email: usuario.notificaciones_email,
     notificaciones_push: usuario.notificaciones_push,
-    
+
     // Información de grupo familiar
     grupo_familiar_id: usuario.grupo_familiar_id,
     rol_en_grupo: usuario.rol_en_grupo,
     codigo_familiar: usuario.codigo_familiar,
     nombre_grupo: usuario.nombre_grupo,
     grupo_activo: usuario.grupo_activo,
-    
+
     // Timestamps
     creado_en: usuario.creado_en,
     actualizado_en: usuario.actualizado_en,
     ultimo_acceso: usuario.ultimo_acceso
   };
-  
+
   // Log reducido para seguridad
   console.log(`✅ Usuario adjuntado a request: ${usuario.nombre} (${usuario.rol})`);
 };
@@ -240,7 +240,7 @@ const adjuntarUsuarioARequest = (req, usuario) => {
  */
 const responderErrorAutenticacion = (res, mensaje, codigo, status = 401) => {
   console.error(`❌ Error autenticación [${codigo}]: ${mensaje}`);
-  
+
   return res.status(status).json({
     exito: false,
     error: mensaje,
@@ -258,7 +258,7 @@ const responderErrorAutenticacion = (res, mensaje, codigo, status = 401) => {
 export const verificarRol = (...rolesPermitidos) => {
   return (req, res, next) => {
     console.log(`👮‍♂️ [MIDDLEWARE] Verificando roles: ${rolesPermitidos.join(', ')}`);
-    
+
     if (!req.usuario) {
       return responderErrorAutenticacion(res,
         'Usuario no autenticado',
@@ -266,10 +266,10 @@ export const verificarRol = (...rolesPermitidos) => {
         401
       );
     }
-    
+
     const rolUsuario = req.usuario.rol;
     const tienePermiso = rolesPermitidos.includes(rolUsuario);
-    
+
     if (!tienePermiso) {
       console.error(`❌ Rol insuficiente: ${rolUsuario}. Requerido: ${rolesPermitidos.join(', ')}`);
       return responderErrorAutenticacion(res,
@@ -278,7 +278,7 @@ export const verificarRol = (...rolesPermitidos) => {
         403
       );
     }
-    
+
     console.log(`✅ Rol verificado: ${rolUsuario}`);
     next();
   };
@@ -290,7 +290,7 @@ export const verificarRol = (...rolesPermitidos) => {
  */
 export const verificarGrupo = (req, res, next) => {
   console.log('🏠 [MIDDLEWARE] Verificando grupo familiar...');
-  
+
   if (!req.usuario) {
     return responderErrorAutenticacion(res,
       'Usuario no autenticado',
@@ -298,7 +298,7 @@ export const verificarGrupo = (req, res, next) => {
       401
     );
   }
-  
+
   if (!req.usuario.grupo_familiar_id) {
     console.error('❌ Usuario no tiene grupo familiar asignado');
     return responderErrorAutenticacion(res,
@@ -307,7 +307,7 @@ export const verificarGrupo = (req, res, next) => {
       403
     );
   }
-  
+
   if (!req.usuario.grupo_activo) {
     console.error('❌ Grupo familiar inactivo');
     return responderErrorAutenticacion(res,
@@ -316,7 +316,7 @@ export const verificarGrupo = (req, res, next) => {
       403
     );
   }
-  
+
   console.log(`✅ Usuario pertenece al grupo: ${req.usuario.grupo_familiar_id}`);
   next();
 };
@@ -327,7 +327,7 @@ export const verificarGrupo = (req, res, next) => {
  */
 export const verificarAdminGrupo = (req, res, next) => {
   console.log('👑 [MIDDLEWARE] Verificando administrador de grupo...');
-  
+
   if (!req.usuario) {
     return responderErrorAutenticacion(res,
       'Usuario no autenticado',
@@ -335,11 +335,11 @@ export const verificarAdminGrupo = (req, res, next) => {
       401
     );
   }
-  
-  const esAdmin = req.usuario.rol === 'admin' || 
-                  req.usuario.rol === 'familiar_admin' || 
-                  req.usuario.rol_en_grupo === 'admin';
-  
+
+  const esAdmin = req.usuario.rol === 'admin' ||
+    req.usuario.rol === 'familiar_admin' ||
+    req.usuario.rol_en_grupo === 'admin';
+
   if (!esAdmin) {
     console.error(`❌ No es administrador: rol=${req.usuario.rol}, rol_en_grupo=${req.usuario.rol_en_grupo}`);
     return responderErrorAutenticacion(res,
@@ -348,7 +348,7 @@ export const verificarAdminGrupo = (req, res, next) => {
       403
     );
   }
-  
+
   console.log('✅ Usuario es administrador del grupo');
   next();
 };
@@ -359,7 +359,7 @@ export const verificarAdminGrupo = (req, res, next) => {
  */
 export const verificarPerfilCompleto = (req, res, next) => {
   console.log('📋 [MIDDLEWARE] Verificando perfil completo...');
-  
+
   if (!req.usuario) {
     return responderErrorAutenticacion(res,
       'Usuario no autenticado',
@@ -367,7 +367,7 @@ export const verificarPerfilCompleto = (req, res, next) => {
       401
     );
   }
-  
+
   if (req.usuario.necesita_completar_perfil) {
     console.error('❌ Usuario necesita completar perfil');
     return responderErrorAutenticacion(res,
@@ -376,7 +376,7 @@ export const verificarPerfilCompleto = (req, res, next) => {
       403
     );
   }
-  
+
   console.log('✅ Perfil completo');
   next();
 };
@@ -392,7 +392,7 @@ export const logAutenticado = (req, res, next) => {
     const ruta = req.originalUrl;
     const usuarioId = req.usuario.id;
     const usuarioEmail = req.usuario.email;
-    
+
     console.log(`📝 [${timestamp}] ${metodo} ${ruta} - Usuario: ${usuarioEmail} (ID: ${usuarioId})`);
   }
   next();
@@ -422,7 +422,7 @@ export const actualizarUltimoAcceso = async (req, res, next) => {
     // No bloquear la request si hay error
     console.error('❌ Error en middleware de último acceso:', error.message);
   }
-  
+
   next();
 };
 
@@ -435,7 +435,7 @@ export const corsAutenticado = (req, res, next) => {
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  
+
   next();
 };
 
@@ -445,7 +445,7 @@ export const corsAutenticado = (req, res, next) => {
  */
 export const validarDatosUsuario = (req, res, next) => {
   console.log('🔍 [MIDDLEWARE] Validando datos de usuario...');
-  
+
   if (!req.usuario) {
     return responderErrorAutenticacion(res,
       'Usuario no autenticado',
@@ -453,10 +453,10 @@ export const validarDatosUsuario = (req, res, next) => {
       401
     );
   }
-  
+
   // Verificar que el usuario está intentando modificar sus propios datos
   const usuarioIdRequest = req.params.id || req.body.usuario_id;
-  
+
   if (usuarioIdRequest && parseInt(usuarioIdRequest) !== req.usuario.id && req.usuario.rol !== 'admin') {
     console.error(`❌ Intento de modificar datos de otro usuario: ${usuarioIdRequest}`);
     return responderErrorAutenticacion(res,
@@ -465,7 +465,7 @@ export const validarDatosUsuario = (req, res, next) => {
       403
     );
   }
-  
+
   console.log('✅ Validación de datos completada');
   next();
 };
@@ -480,7 +480,7 @@ export const limitarRequests = (req, res, next) => {
     // Por ejemplo, usando redis o memoria para contar requests por usuario
     console.log(`⚡ Rate limiting para usuario: ${req.usuario.id}`);
   }
-  
+
   next();
 };
 
