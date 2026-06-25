@@ -305,7 +305,7 @@ export const obtenerMedicinasFrecuentes = async (usuarioId, limite = 5) => {
 
 
 export const crearMedicina = async (usuarioId, medicina) => {
-  console.log('📦 req.body en crearMedicina:', JSON.stringify(req.body));
+  console.log('📦 Datos recibidos - usuarioId:', usuarioId, 'medicina:', JSON.stringify(medicina));
 
   let client;
 
