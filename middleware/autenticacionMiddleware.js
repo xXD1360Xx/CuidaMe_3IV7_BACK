@@ -156,20 +156,7 @@ const obtenerInformacionUsuarioBD = async (usuarioId) => {
   try {
     const query = `
       SELECT 
-        u.id,
-        u.nombre,
-        u.email,
-        u.username,
-        u.rol,
-        u.telefono,
-        u.necesita_completar_perfil,
-        u.estado,
-        u.imagen_perfil,
-        u.notificaciones_email,
-        u.notificaciones_push,
-        u.creado_en,
-        u.actualizado_en,
-        u.ultimo_acceso,
+        u.*,  -- Selecciona todas las columnas de usuarios
         ug.grupo_familiar_id,
         ug.rol_en_grupo,
         gf.codigo_familiar,
