@@ -858,7 +858,7 @@ export const registrarUsuario = async (datosUsuario) => {
     }
 
     // Validar rol
-    const rolesPermitidos = ['familiar_admin', 'familiar_secundario'];
+    const rolesPermitidos = ['familiar_admin', 'familiar_secundario', 'profesional', 'anciano'];
     if (!rolesPermitidos.includes(rol)) {
       return {
         exito: false,
