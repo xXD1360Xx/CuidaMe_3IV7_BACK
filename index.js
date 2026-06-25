@@ -7,6 +7,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { autenticarUsuario } from './middleware/autenticacionMiddleware.js';
+import { enviarCodigo } from './controladores/emailControlador.js';
+
 
 
 // ========== 1. CONFIGURACIÓN DE DIRECTORIOS ==========
@@ -58,7 +60,7 @@ import rutasFamilia from './rutas/rutasFamilia.js';
 import rutasHorario from './rutas/rutasHorario.js'; // Nueva ruta para horario
 import rutasInfoAnciano from './rutas/rutasInfoAnciano.js'; // Nueva ruta para info adulto
 import rutasPreferencias from './rutas/rutasPreferencias.js'; // Nueva ruta para preferencias
-
+import rutasEmail from './rutas/rutasEmail.js'; // Nueva ruta para email  
 console.log('✅ Todas las rutas importadas correctamente');
 
 // ========== 4. CONFIGURACIÓN DE EXPRESS ==========
@@ -379,6 +381,9 @@ console.log('✅ Rutas montadas en /api/usuarioProfesional');
 
 app.use('/api/usuarioAnciano', rutasUsuarioAnciano);
 console.log('✅ Rutas montadas en /api/usuarioAnciano');
+
+app.use('/api/email', rutasEmail);
+console.log('✅ Rutas montadas en /api/email');
 
 // ========== 8. SERVIR ARCHIVOS ESTÁTICOS ==========
 const directoriosEstaticos = [
