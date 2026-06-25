@@ -104,6 +104,7 @@ router.post('/frecuentes', autenticarUsuario, async (req, res) => {
  * 4. Crear nueva medicina
  * POST /api/medicinas/crear
  */
+// En rutasMedicinas.js
 router.post('/crear', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, medicina } = req.body;
@@ -119,21 +120,13 @@ router.post('/crear', autenticarUsuario, async (req, res) => {
     const resultado = await medicinasControlador.crearMedicina(usuario_id, medicina);
 
     if (!resultado.exito) {
-      const statusCode = resultado.codigo === 'SIN_PERMISOS' || resultado.codigo === 'ADULTO_NO_ENCONTRADO'
-        ? 403
-        : 400;
-      return res.status(statusCode).json(resultado);
+      return res.status(400).json(resultado);
     }
 
     res.status(201).json(resultado);
-
   } catch (error) {
-    console.error('❌ Error en ruta /crear:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en POST /medicinas/crear:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 

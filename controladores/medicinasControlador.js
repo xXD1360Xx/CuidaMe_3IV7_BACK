@@ -8,12 +8,12 @@ import { pool } from '../configuracion/basedeDatos.js';
  */
 export const obtenerTodasMedicinas = async (usuarioId) => {
   let client;
-  
+
   try {
     console.log('💊 [MEDICINAS] Obteniendo todas las medicinas para usuario ID:', usuarioId);
-    
+
     client = await pool.connect();
-    
+
     // Obtener el adulto mayor principal del usuario
     const adultoMayorQuery = `
       SELECT am.id 
@@ -23,9 +23,9 @@ export const obtenerTodasMedicinas = async (usuarioId) => {
       ORDER BY f.es_principal DESC
       LIMIT 1
     `;
-    
+
     const adultoMayorResult = await client.query(adultoMayorQuery, [usuarioId]);
-    
+
     if (adultoMayorResult.rows.length === 0) {
       return {
         exito: true,
@@ -33,9 +33,9 @@ export const obtenerTodasMedicinas = async (usuarioId) => {
         mensaje: 'No se encontró un adulto mayor asociado'
       };
     }
-    
+
     const adulto_mayor_id = adultoMayorResult.rows[0].id;
-    
+
     // Obtener todas las medicinas activas
     const query = `
       SELECT 
@@ -73,11 +73,11 @@ export const obtenerTodasMedicinas = async (usuarioId) => {
         END,
         m.nombre
     `;
-    
+
     const result = await client.query(query, [adulto_mayor_id]);
-    
+
     console.log(`✅ Encontradas ${result.rows.length} medicinas`);
-    
+
     return {
       exito: true,
       medicinas: result.rows.map(med => ({
@@ -87,11 +87,11 @@ export const obtenerTodasMedicinas = async (usuarioId) => {
       adulto_mayor_id,
       total: result.rows.length
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerTodasMedicinas:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener medicinas',
       codigo: 'ERROR_SERVIDOR',
       medicinas: []
@@ -108,15 +108,15 @@ export const obtenerTodasMedicinas = async (usuarioId) => {
  */
 export const obtenerMedicinasHoy = async (usuarioId) => {
   let client;
-  
+
   try {
     console.log('📅 [MEDICINAS] Obteniendo medicinas para hoy para usuario ID:', usuarioId);
-    
+
     const hoy = new Date().toISOString().split('T')[0];
     const diaSemana = new Date().getDay(); // 0 = Domingo, 1 = Lunes, etc.
-    
+
     client = await pool.connect();
-    
+
     // Obtener el adulto mayor principal del usuario
     const adultoMayorQuery = `
       SELECT am.id 
@@ -126,9 +126,9 @@ export const obtenerMedicinasHoy = async (usuarioId) => {
       ORDER BY f.es_principal DESC
       LIMIT 1
     `;
-    
+
     const adultoMayorResult = await client.query(adultoMayorQuery, [usuarioId]);
-    
+
     if (adultoMayorResult.rows.length === 0) {
       return {
         exito: true,
@@ -137,9 +137,9 @@ export const obtenerMedicinasHoy = async (usuarioId) => {
         mensaje: 'No se encontró un adulto mayor asociado'
       };
     }
-    
+
     const adulto_mayor_id = adultoMayorResult.rows[0].id;
-    
+
     // Obtener medicinas que se deben tomar hoy
     const query = `
       SELECT 
@@ -181,17 +181,17 @@ export const obtenerMedicinasHoy = async (usuarioId) => {
         END,
         m.nombre
     `;
-    
+
     const result = await client.query(query, [hoy, adulto_mayor_id, diaSemana]);
-    
+
     const medicinas = result.rows.map(med => ({
       ...med,
       horarios: med.horarios || [],
       horarios_tomados_hoy: med.horarios_tomados_hoy || []
     }));
-    
+
     console.log(`✅ Encontradas ${medicinas.length} medicinas para hoy`);
-    
+
     return {
       exito: true,
       medicinas,
@@ -199,11 +199,11 @@ export const obtenerMedicinasHoy = async (usuarioId) => {
       dia_semana: diaSemana,
       adulto_mayor_id
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerMedicinasHoy:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener medicinas para hoy',
       codigo: 'ERROR_SERVIDOR',
       medicinas: []
@@ -220,12 +220,12 @@ export const obtenerMedicinasHoy = async (usuarioId) => {
  */
 export const obtenerMedicinasFrecuentes = async (usuarioId, limite = 5) => {
   let client;
-  
+
   try {
     console.log('🏆 [MEDICINAS] Obteniendo medicinas frecuentes para usuario ID:', usuarioId);
-    
+
     client = await pool.connect();
-    
+
     // Obtener el adulto mayor principal del usuario
     const adultoMayorQuery = `
       SELECT am.id 
@@ -235,9 +235,9 @@ export const obtenerMedicinasFrecuentes = async (usuarioId, limite = 5) => {
       ORDER BY f.es_principal DESC
       LIMIT 1
     `;
-    
+
     const adultoMayorResult = await client.query(adultoMayorQuery, [usuarioId]);
-    
+
     if (adultoMayorResult.rows.length === 0) {
       return {
         exito: true,
@@ -245,9 +245,9 @@ export const obtenerMedicinasFrecuentes = async (usuarioId, limite = 5) => {
         mensaje: 'No se encontró un adulto mayor asociado'
       };
     }
-    
+
     const adulto_mayor_id = adultoMayorResult.rows[0].id;
-    
+
     // Obtener medicinas más frecuentes (diarias)
     const query = `
       SELECT 
@@ -267,27 +267,27 @@ export const obtenerMedicinasFrecuentes = async (usuarioId, limite = 5) => {
       ORDER BY veces_tomada DESC, m.creado_en DESC
       LIMIT $2
     `;
-    
+
     const result = await client.query(query, [adulto_mayor_id, limite]);
-    
+
     const medicinas = result.rows.map(med => ({
       ...med,
       horarios: med.horarios || []
     }));
-    
+
     console.log(`✅ Encontradas ${medicinas.length} medicinas frecuentes`);
-    
+
     return {
       exito: true,
       medicinas,
       limite,
       adulto_mayor_id
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerMedicinasFrecuentes:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener medicinas frecuentes',
       codigo: 'ERROR_SERVIDOR',
       medicinas: []
@@ -302,38 +302,42 @@ export const obtenerMedicinasFrecuentes = async (usuarioId, limite = 5) => {
 /**
  * 4. Crear nueva medicina
  */
+
+
 export const crearMedicina = async (usuarioId, medicina) => {
+  console.log('📦 req.body en crearMedicina:', JSON.stringify(req.body));
+
   let client;
-  
+
   try {
     console.log('➕ [MEDICINAS] Creando nueva medicina para usuario ID:', usuarioId);
-    
+
     // Validar datos requeridos
     const camposRequeridos = ['nombre', 'dosis', 'horarios'];
     for (const campo of camposRequeridos) {
       if (!medicina[campo] || (Array.isArray(medicina[campo]) && medicina[campo].length === 0)) {
-        return { 
-          exito: false, 
+        return {
+          exito: false,
           error: `El campo ${campo} es requerido`,
           codigo: 'DATOS_INCOMPLETOS'
         };
       }
     }
-    
+
     // Validar horarios
     const horariosPermitidos = ['manana', 'mediodia', 'tarde', 'noche'];
     for (const horario of medicina.horarios) {
       if (!horariosPermitidos.includes(horario)) {
-        return { 
-          exito: false, 
+        return {
+          exito: false,
           error: `Horario inválido: ${horario}`,
           codigo: 'HORARIO_INVALIDO'
         };
       }
     }
-    
+
     client = await pool.connect();
-    
+
     // Obtener el adulto mayor principal del usuario
     const adultoMayorQuery = `
       SELECT am.id 
@@ -343,19 +347,19 @@ export const crearMedicina = async (usuarioId, medicina) => {
       ORDER BY f.es_principal DESC
       LIMIT 1
     `;
-    
+
     const adultoMayorResult = await client.query(adultoMayorQuery, [usuarioId]);
-    
+
     if (adultoMayorResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No se encontró un adulto mayor asociado',
         codigo: 'ADULTO_NO_ENCONTRADO'
       };
     }
-    
+
     const adulto_mayor_id = adultoMayorResult.rows[0].id;
-    
+
     // Verificar si ya existe una medicina similar
     const existeQuery = `
       SELECT 1 FROM medicinas 
@@ -363,20 +367,20 @@ export const crearMedicina = async (usuarioId, medicina) => {
         AND LOWER(nombre) = LOWER($2)
         AND activa = true
     `;
-    
+
     const existeResult = await client.query(existeQuery, [
-      adulto_mayor_id, 
+      adulto_mayor_id,
       medicina.nombre.trim()
     ]);
-    
+
     if (existeResult.rows.length > 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'Esta medicina ya está registrada',
         codigo: 'MEDICINA_DUPLICADA'
       };
     }
-    
+
     // Insertar nueva medicina
     const insertQuery = `
       INSERT INTO medicinas (
@@ -397,7 +401,7 @@ export const crearMedicina = async (usuarioId, medicina) => {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *
     `;
-    
+
     const values = [
       adulto_mayor_id,
       medicina.nombre.trim(),
@@ -411,35 +415,35 @@ export const crearMedicina = async (usuarioId, medicina) => {
       medicina.stock_minimo || 10,
       medicina.fecha_inicio || new Date().toISOString().split('T')[0],
       medicina.fecha_fin || null,
-      medicina.dias_semana || (medicina.frecuencia === 'semanal' ? [1,2,3,4,5,6,0] : null),
+      medicina.dias_semana || (medicina.frecuencia === 'semanal' ? [1, 2, 3, 4, 5, 6, 0] : null),
       usuarioId
     ];
-    
+
     const result = await client.query(insertQuery, values);
-    
+
     const nuevaMedicina = result.rows[0];
-    
+
     console.log('✅ Medicina creada exitosamente:', nuevaMedicina.nombre);
-    
+
     return {
       exito: true,
       medicina: nuevaMedicina,
       mensaje: 'Medicina creada correctamente'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en crearMedicina:', error.message);
-    
+
     if (error.code === '23505') {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'La medicina ya existe',
         codigo: 'MEDICINA_DUPLICADA'
       };
     }
-    
-    return { 
-      exito: false, 
+
+    return {
+      exito: false,
       error: 'Error del servidor al crear medicina',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -455,58 +459,58 @@ export const crearMedicina = async (usuarioId, medicina) => {
  */
 export const actualizarMedicina = async (medicinaId, usuarioId, medicina) => {
   let client;
-  
+
   try {
     console.log('✏️ [MEDICINAS] Actualizando medicina ID:', medicinaId);
-    
+
     client = await pool.connect();
-    
+
     // Verificar que la medicina existe y pertenece al adulto mayor del usuario
     const verifyQuery = `
       SELECT m.id, m.adulto_mayor_id
       FROM medicinas m
       WHERE m.id = $1
     `;
-    
+
     const verifyResult = await client.query(verifyQuery, [medicinaId]);
-    
+
     if (verifyResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'Medicina no encontrada',
         codigo: 'MEDICINA_NO_ENCONTRADA'
       };
     }
-    
+
     const adultoId = verifyResult.rows[0].adulto_mayor_id;
-    
+
     // Verificar permisos
     const permisoQuery = `
       SELECT 1 FROM familiares 
       WHERE usuario_id = $1 AND adulto_mayor_id = $2
     `;
-    
+
     const permisoResult = await client.query(permisoQuery, [usuarioId, adultoId]);
-    
+
     if (permisoResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No tienes permiso para modificar esta medicina',
         codigo: 'SIN_PERMISOS'
       };
     }
-    
+
     // Construir query dinámica
     const updates = [];
     const values = [];
     let paramIndex = 1;
-    
+
     const camposPermitidos = [
       'nombre', 'dosis', 'frecuencia', 'horarios', 'duracion_dias',
       'proposito', 'instrucciones', 'stock_actual', 'stock_minimo',
       'fecha_inicio', 'fecha_fin', 'dias_semana', 'activa'
     ];
-    
+
     for (const campo of camposPermitidos) {
       if (medicina[campo] !== undefined) {
         updates.push(`${campo} = $${paramIndex}`);
@@ -514,40 +518,40 @@ export const actualizarMedicina = async (medicinaId, usuarioId, medicina) => {
         paramIndex++;
       }
     }
-    
+
     if (updates.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No se proporcionaron datos para actualizar',
         codigo: 'SIN_CAMPOS'
       };
     }
-    
+
     values.push(medicinaId);
-    
+
     const query = `
       UPDATE medicinas 
       SET ${updates.join(', ')}, actualizado_en = CURRENT_TIMESTAMP
       WHERE id = $${paramIndex}
       RETURNING *
     `;
-    
+
     const result = await client.query(query, values);
-    
+
     const medicinaActualizada = result.rows[0];
-    
+
     console.log('✅ Medicina actualizada exitosamente');
-    
+
     return {
       exito: true,
       medicina: medicinaActualizada,
       mensaje: 'Medicina actualizada correctamente'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en actualizarMedicina:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al actualizar medicina',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -563,47 +567,47 @@ export const actualizarMedicina = async (medicinaId, usuarioId, medicina) => {
  */
 export const eliminarMedicina = async (medicinaId, usuarioId) => {
   let client;
-  
+
   try {
     console.log('🗑️ [MEDICINAS] Eliminando medicina ID:', medicinaId);
-    
+
     client = await pool.connect();
-    
+
     // Verificar que la medicina existe y pertenece al adulto mayor del usuario
     const verifyQuery = `
       SELECT m.id, m.adulto_mayor_id
       FROM medicinas m
       WHERE m.id = $1
     `;
-    
+
     const verifyResult = await client.query(verifyQuery, [medicinaId]);
-    
+
     if (verifyResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'Medicina no encontrada',
         codigo: 'MEDICINA_NO_ENCONTRADA'
       };
     }
-    
+
     const adultoId = verifyResult.rows[0].adulto_mayor_id;
-    
+
     // Verificar permisos
     const permisoQuery = `
       SELECT 1 FROM familiares 
       WHERE usuario_id = $1 AND adulto_mayor_id = $2
     `;
-    
+
     const permisoResult = await client.query(permisoQuery, [usuarioId, adultoId]);
-    
+
     if (permisoResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No tienes permiso para eliminar esta medicina',
         codigo: 'SIN_PERMISOS'
       };
     }
-    
+
     // Borrado lógico
     const deleteQuery = `
       UPDATE medicinas 
@@ -611,21 +615,21 @@ export const eliminarMedicina = async (medicinaId, usuarioId) => {
       WHERE id = $1
       RETURNING id
     `;
-    
+
     const result = await client.query(deleteQuery, [medicinaId]);
-    
+
     console.log('✅ Medicina eliminada exitosamente');
-    
+
     return {
       exito: true,
       mensaje: 'Medicina eliminada correctamente',
       id: result.rows[0].id
     };
-    
+
   } catch (error) {
     console.error('❌ Error en eliminarMedicina:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al eliminar medicina',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -641,52 +645,52 @@ export const eliminarMedicina = async (medicinaId, usuarioId) => {
  */
 export const marcarMedicinaTomada = async (medicinaId, usuarioId, datos) => {
   let client;
-  
+
   try {
     console.log('✅ [MEDICINAS] Marcando medicina como tomada, ID:', medicinaId);
-    
+
     const { fecha_toma, horario, observaciones } = datos;
-    
+
     client = await pool.connect();
-    
+
     // Verificar que la medicina existe y pertenece al adulto mayor del usuario
     const verifyQuery = `
       SELECT m.id, m.adulto_mayor_id, m.nombre
       FROM medicinas m
       WHERE m.id = $1
     `;
-    
+
     const verifyResult = await client.query(verifyQuery, [medicinaId]);
-    
+
     if (verifyResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'Medicina no encontrada',
         codigo: 'MEDICINA_NO_ENCONTRADA'
       };
     }
-    
+
     const medicina = verifyResult.rows[0];
     const adultoId = medicina.adulto_mayor_id;
-    
+
     // Verificar permisos
     const permisoQuery = `
       SELECT 1 FROM familiares 
       WHERE usuario_id = $1 AND adulto_mayor_id = $2
     `;
-    
+
     const permisoResult = await client.query(permisoQuery, [usuarioId, adultoId]);
-    
+
     if (permisoResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No tienes acceso a esta medicina',
         codigo: 'SIN_ACCESO'
       };
     }
-    
+
     const fechaToma = fecha_toma || new Date().toISOString().split('T')[0];
-    
+
     // Verificar si ya existe registro para hoy en este horario
     const checkQuery = `
       SELECT id FROM registros_medicina 
@@ -694,15 +698,15 @@ export const marcarMedicinaTomada = async (medicinaId, usuarioId, datos) => {
         AND fecha_toma = $2 
         AND horario = $3
     `;
-    
+
     const checkResult = await client.query(checkQuery, [
       medicinaId,
       fechaToma,
       horario
     ]);
-    
+
     let resultado;
-    
+
     if (checkResult.rows.length > 0) {
       // Actualizar registro existente
       const updateQuery = `
@@ -714,13 +718,13 @@ export const marcarMedicinaTomada = async (medicinaId, usuarioId, datos) => {
         WHERE id = $3
         RETURNING *
       `;
-      
+
       const updateResult = await client.query(updateQuery, [
         observaciones || null,
         usuarioId,
         checkResult.rows[0].id
       ]);
-      
+
       resultado = updateResult.rows[0];
     } else {
       // Insertar nuevo registro
@@ -736,7 +740,7 @@ export const marcarMedicinaTomada = async (medicinaId, usuarioId, datos) => {
         ) VALUES ($1, $2, $3, $4, $5, true, $6)
         RETURNING *
       `;
-      
+
       const insertResult = await client.query(insertQuery, [
         medicinaId,
         usuarioId,
@@ -745,27 +749,27 @@ export const marcarMedicinaTomada = async (medicinaId, usuarioId, datos) => {
         horario,
         observaciones || null
       ]);
-      
+
       resultado = insertResult.rows[0];
     }
-    
+
     // Reducir stock si es necesario
     if (resultado.completada) {
       await reducirStockMedicina(medicinaId, 1);
     }
-    
+
     console.log('✅ Medicina marcada como tomada:', medicina.nombre);
-    
+
     return {
       exito: true,
       registro: resultado,
       mensaje: 'Medicina marcada como tomada'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en marcarMedicinaTomada:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al marcar medicina como tomada',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -781,12 +785,12 @@ export const marcarMedicinaTomada = async (medicinaId, usuarioId, datos) => {
  */
 export const obtenerRegistrosMedicina = async (usuarioId, fechaInicio = null, fechaFin = null) => {
   let client;
-  
+
   try {
     console.log('📋 [MEDICINAS] Obteniendo registros de medicinas para usuario ID:', usuarioId);
-    
+
     client = await pool.connect();
-    
+
     // Obtener el adulto mayor principal del usuario
     const adultoMayorQuery = `
       SELECT am.id 
@@ -796,9 +800,9 @@ export const obtenerRegistrosMedicina = async (usuarioId, fechaInicio = null, fe
       ORDER BY f.es_principal DESC
       LIMIT 1
     `;
-    
+
     const adultoMayorResult = await client.query(adultoMayorQuery, [usuarioId]);
-    
+
     if (adultoMayorResult.rows.length === 0) {
       return {
         exito: true,
@@ -806,14 +810,14 @@ export const obtenerRegistrosMedicina = async (usuarioId, fechaInicio = null, fe
         mensaje: 'No se encontró un adulto mayor asociado'
       };
     }
-    
+
     const adulto_mayor_id = adultoMayorResult.rows[0].id;
-    
+
     const fechaInicioConsulta = fechaInicio || new Date();
     fechaInicioConsulta.setDate(fechaInicioConsulta.getDate() - 7); // Últimos 7 días por defecto
-    
+
     const fechaFinConsulta = fechaFin || new Date();
-    
+
     const query = `
       SELECT 
         rm.id,
@@ -840,15 +844,15 @@ export const obtenerRegistrosMedicina = async (usuarioId, fechaInicio = null, fe
           ELSE 5
         END
     `;
-    
+
     const result = await client.query(query, [
       adulto_mayor_id,
       fechaInicioConsulta.toISOString().split('T')[0],
       fechaFinConsulta.toISOString().split('T')[0]
     ]);
-    
+
     console.log(`✅ Encontrados ${result.rows.length} registros de medicinas`);
-    
+
     return {
       exito: true,
       registros: result.rows,
@@ -858,11 +862,11 @@ export const obtenerRegistrosMedicina = async (usuarioId, fechaInicio = null, fe
       },
       adulto_mayor_id
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerRegistrosMedicina:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener registros de medicinas',
       codigo: 'ERROR_SERVIDOR',
       registros: []
@@ -879,12 +883,12 @@ export const obtenerRegistrosMedicina = async (usuarioId, fechaInicio = null, fe
  */
 export const obtenerMedicinasPorFrecuencia = async (usuarioId, frecuencia) => {
   let client;
-  
+
   try {
     console.log('📊 [MEDICINAS] Obteniendo medicinas por frecuencia:', frecuencia);
-    
+
     client = await pool.connect();
-    
+
     // Obtener el adulto mayor principal del usuario
     const adultoMayorQuery = `
       SELECT am.id 
@@ -894,9 +898,9 @@ export const obtenerMedicinasPorFrecuencia = async (usuarioId, frecuencia) => {
       ORDER BY f.es_principal DESC
       LIMIT 1
     `;
-    
+
     const adultoMayorResult = await client.query(adultoMayorQuery, [usuarioId]);
-    
+
     if (adultoMayorResult.rows.length === 0) {
       return {
         exito: true,
@@ -905,9 +909,9 @@ export const obtenerMedicinasPorFrecuencia = async (usuarioId, frecuencia) => {
         mensaje: 'No se encontró un adulto mayor asociado'
       };
     }
-    
+
     const adulto_mayor_id = adultoMayorResult.rows[0].id;
-    
+
     const query = `
       SELECT 
         id,
@@ -924,16 +928,16 @@ export const obtenerMedicinasPorFrecuencia = async (usuarioId, frecuencia) => {
         AND activa = true
       ORDER BY nombre
     `;
-    
+
     const result = await client.query(query, [adulto_mayor_id, frecuencia]);
-    
+
     const medicinas = result.rows.map(med => ({
       ...med,
       horarios: med.horarios || []
     }));
-    
+
     console.log(`✅ Encontradas ${medicinas.length} medicinas con frecuencia "${frecuencia}"`);
-    
+
     return {
       exito: true,
       frecuencia,
@@ -941,11 +945,11 @@ export const obtenerMedicinasPorFrecuencia = async (usuarioId, frecuencia) => {
       adulto_mayor_id,
       total: medicinas.length
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerMedicinasPorFrecuencia:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener medicinas por frecuencia',
       codigo: 'ERROR_SERVIDOR',
       medicinas: []
@@ -962,12 +966,12 @@ export const obtenerMedicinasPorFrecuencia = async (usuarioId, frecuencia) => {
  */
 export const obtenerEstadisticasMedicinas = async (usuarioId) => {
   let client;
-  
+
   try {
     console.log('📈 [MEDICINAS] Obteniendo estadísticas de medicinas para usuario ID:', usuarioId);
-    
+
     client = await pool.connect();
-    
+
     // Obtener el adulto mayor principal del usuario
     const adultoMayorQuery = `
       SELECT am.id 
@@ -977,9 +981,9 @@ export const obtenerEstadisticasMedicinas = async (usuarioId) => {
       ORDER BY f.es_principal DESC
       LIMIT 1
     `;
-    
+
     const adultoMayorResult = await client.query(adultoMayorQuery, [usuarioId]);
-    
+
     if (adultoMayorResult.rows.length === 0) {
       return {
         exito: true,
@@ -987,10 +991,10 @@ export const obtenerEstadisticasMedicinas = async (usuarioId) => {
         mensaje: 'No se encontró un adulto mayor asociado'
       };
     }
-    
+
     const adulto_mayor_id = adultoMayorResult.rows[0].id;
     const hoy = new Date().toISOString().split('T')[0];
-    
+
     // Obtener estadísticas
     const query = `
       SELECT 
@@ -1026,11 +1030,11 @@ export const obtenerEstadisticasMedicinas = async (usuarioId) => {
       WHERE adulto_mayor_id = $1
         AND activa = true
     `;
-    
+
     const result = await client.query(query, [adulto_mayor_id, hoy]);
-    
+
     const estadisticas = result.rows[0];
-    
+
     // Calcular porcentaje de cumplimiento hoy
     const totalMedicinasHoy = estadisticas.medicinas_diarias;
     if (totalMedicinasHoy > 0) {
@@ -1040,9 +1044,9 @@ export const obtenerEstadisticasMedicinas = async (usuarioId) => {
     } else {
       estadisticas.porcentaje_cumplimiento_hoy = 0;
     }
-    
+
     console.log('✅ Estadísticas de medicinas obtenidas');
-    
+
     return {
       exito: true,
       estadisticas: {
@@ -1051,11 +1055,11 @@ export const obtenerEstadisticasMedicinas = async (usuarioId) => {
         adulto_mayor_id
       }
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerEstadisticasMedicinas:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener estadísticas',
       codigo: 'ERROR_SERVIDOR',
       estadisticas: {}
@@ -1072,48 +1076,48 @@ export const obtenerEstadisticasMedicinas = async (usuarioId) => {
  */
 export const actualizarStockMedicina = async (medicinaId, usuarioId, nuevoStock) => {
   let client;
-  
+
   try {
     console.log('📦 [MEDICINAS] Actualizando stock de medicina ID:', medicinaId);
-    
+
     client = await pool.connect();
-    
+
     // Verificar que la medicina existe y pertenece al adulto mayor del usuario
     const verifyQuery = `
       SELECT m.id, m.adulto_mayor_id, m.nombre, m.stock_actual
       FROM medicinas m
       WHERE m.id = $1
     `;
-    
+
     const verifyResult = await client.query(verifyQuery, [medicinaId]);
-    
+
     if (verifyResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'Medicina no encontrada',
         codigo: 'MEDICINA_NO_ENCONTRADA'
       };
     }
-    
+
     const medicina = verifyResult.rows[0];
     const adultoId = medicina.adulto_mayor_id;
-    
+
     // Verificar permisos
     const permisoQuery = `
       SELECT 1 FROM familiares 
       WHERE usuario_id = $1 AND adulto_mayor_id = $2
     `;
-    
+
     const permisoResult = await client.query(permisoQuery, [usuarioId, adultoId]);
-    
+
     if (permisoResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No tienes permiso para actualizar esta medicina',
         codigo: 'SIN_PERMISOS'
       };
     }
-    
+
     // Actualizar stock
     const updateQuery = `
       UPDATE medicinas 
@@ -1121,11 +1125,11 @@ export const actualizarStockMedicina = async (medicinaId, usuarioId, nuevoStock)
       WHERE id = $2
       RETURNING *
     `;
-    
+
     const result = await client.query(updateQuery, [nuevoStock, medicinaId]);
-    
+
     const medicinaActualizada = result.rows[0];
-    
+
     // Registrar movimiento de stock
     await registrarMovimientoStock({
       medicina_id: medicinaId,
@@ -1136,9 +1140,9 @@ export const actualizarStockMedicina = async (medicinaId, usuarioId, nuevoStock)
       cantidad_nueva: nuevoStock,
       observaciones: 'Ajuste manual de stock'
     });
-    
+
     console.log(`✅ Stock actualizado: ${medicina.nombre} - ${medicina.stock_actual} → ${nuevoStock}`);
-    
+
     return {
       exito: true,
       medicina: medicinaActualizada,
@@ -1149,11 +1153,11 @@ export const actualizarStockMedicina = async (medicinaId, usuarioId, nuevoStock)
       },
       mensaje: 'Stock actualizado correctamente'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en actualizarStockMedicina:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al actualizar stock',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -1169,12 +1173,12 @@ export const actualizarStockMedicina = async (medicinaId, usuarioId, nuevoStock)
  */
 export const obtenerMedicinasStockBajo = async (usuarioId) => {
   let client;
-  
+
   try {
     console.log('⚠️ [MEDICINAS] Obteniendo medicinas con stock bajo para usuario ID:', usuarioId);
-    
+
     client = await pool.connect();
-    
+
     // Obtener el adulto mayor principal del usuario
     const adultoMayorQuery = `
       SELECT am.id 
@@ -1184,9 +1188,9 @@ export const obtenerMedicinasStockBajo = async (usuarioId) => {
       ORDER BY f.es_principal DESC
       LIMIT 1
     `;
-    
+
     const adultoMayorResult = await client.query(adultoMayorQuery, [usuarioId]);
-    
+
     if (adultoMayorResult.rows.length === 0) {
       return {
         exito: true,
@@ -1194,9 +1198,9 @@ export const obtenerMedicinasStockBajo = async (usuarioId) => {
         mensaje: 'No se encontró un adulto mayor asociado'
       };
     }
-    
+
     const adulto_mayor_id = adultoMayorResult.rows[0].id;
-    
+
     const query = `
       SELECT 
         id,
@@ -1217,11 +1221,11 @@ export const obtenerMedicinasStockBajo = async (usuarioId) => {
         AND stock_actual <= stock_minimo
       ORDER BY stock_actual ASC, porcentaje_stock ASC
     `;
-    
+
     const result = await client.query(query, [adulto_mayor_id]);
-    
+
     console.log(`✅ Encontradas ${result.rows.length} medicinas con stock bajo`);
-    
+
     return {
       exito: true,
       medicinas: result.rows,
@@ -1229,11 +1233,11 @@ export const obtenerMedicinasStockBajo = async (usuarioId) => {
       total: result.rows.length,
       alertas: result.rows.filter(m => m.stock_actual <= 0).length
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerMedicinasStockBajo:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener medicinas con stock bajo',
       codigo: 'ERROR_SERVIDOR',
       medicinas: []
@@ -1250,10 +1254,10 @@ export const obtenerMedicinasStockBajo = async (usuarioId) => {
  */
 export const buscarMedicinas = async (usuarioId, busqueda) => {
   let client;
-  
+
   try {
     console.log('🔍 [MEDICINAS] Buscando medicinas:', busqueda);
-    
+
     if (!busqueda || busqueda.trim().length < 2) {
       return {
         exito: true,
@@ -1262,11 +1266,11 @@ export const buscarMedicinas = async (usuarioId, busqueda) => {
         mensaje: 'Término de búsqueda muy corto'
       };
     }
-    
+
     const termino = `%${busqueda.trim()}%`;
-    
+
     client = await pool.connect();
-    
+
     // Obtener el adulto mayor principal del usuario
     const adultoMayorQuery = `
       SELECT am.id 
@@ -1276,9 +1280,9 @@ export const buscarMedicinas = async (usuarioId, busqueda) => {
       ORDER BY f.es_principal DESC
       LIMIT 1
     `;
-    
+
     const adultoMayorResult = await client.query(adultoMayorQuery, [usuarioId]);
-    
+
     if (adultoMayorResult.rows.length === 0) {
       return {
         exito: true,
@@ -1287,9 +1291,9 @@ export const buscarMedicinas = async (usuarioId, busqueda) => {
         mensaje: 'No se encontró un adulto mayor asociado'
       };
     }
-    
+
     const adulto_mayor_id = adultoMayorResult.rows[0].id;
-    
+
     const query = `
       SELECT 
         id,
@@ -1318,27 +1322,27 @@ export const buscarMedicinas = async (usuarioId, busqueda) => {
         nombre
       LIMIT 20
     `;
-    
+
     const result = await client.query(query, [adulto_mayor_id, termino]);
-    
+
     const medicinas = result.rows.map(med => ({
       ...med,
       horarios: med.horarios || []
     }));
-    
+
     console.log(`✅ Encontradas ${medicinas.length} medicinas para "${busqueda}"`);
-    
+
     return {
       exito: true,
       medicinas,
       busqueda,
       total: medicinas.length
     };
-    
+
   } catch (error) {
     console.error('❌ Error en buscarMedicinas:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al buscar medicinas',
       codigo: 'ERROR_SERVIDOR',
       medicinas: []
@@ -1356,7 +1360,7 @@ export const buscarMedicinas = async (usuarioId, busqueda) => {
 export const obtenerMedicamentosPredefinidos = async () => {
   try {
     console.log('📦 [MEDICINAS] Obteniendo medicamentos predefinidos');
-    
+
     // Medicamentos predefinidos comunes para adultos mayores
     const medicamentosPredefinidos = [
       {
@@ -1417,16 +1421,16 @@ export const obtenerMedicamentosPredefinidos = async () => {
         advertencia: 'Uso controlado'
       }
     ];
-    
+
     return {
       exito: true,
       medicamentos: medicamentosPredefinidos
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerMedicamentosPredefinidos:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener medicamentos predefinidos',
       codigo: 'ERROR_SERVIDOR',
       medicamentos: []
@@ -1441,10 +1445,10 @@ export const obtenerMedicamentosPredefinidos = async () => {
  */
 const reducirStockMedicina = async (medicinaId, cantidad) => {
   let client;
-  
+
   try {
     client = await pool.connect();
-    
+
     const query = `
       UPDATE medicinas 
       SET stock_actual = GREATEST(0, stock_actual - $1), 
@@ -1452,11 +1456,11 @@ const reducirStockMedicina = async (medicinaId, cantidad) => {
       WHERE id = $2
       RETURNING stock_actual
     `;
-    
+
     const result = await client.query(query, [cantidad, medicinaId]);
-    
+
     return result.rows[0];
-    
+
   } catch (error) {
     console.error('❌ Error en reducirStockMedicina:', error.message);
     return null;
@@ -1472,10 +1476,10 @@ const reducirStockMedicina = async (medicinaId, cantidad) => {
  */
 const registrarMovimientoStock = async (movimiento) => {
   let client;
-  
+
   try {
     client = await pool.connect();
-    
+
     const query = `
       INSERT INTO movimientos_stock_medicina (
         medicina_id,
@@ -1487,7 +1491,7 @@ const registrarMovimientoStock = async (movimiento) => {
         observaciones
       ) VALUES ($1, $2, $3, $4, $5, $6, $7)
     `;
-    
+
     await client.query(query, [
       movimiento.medicina_id,
       movimiento.usuario_id,
@@ -1497,7 +1501,7 @@ const registrarMovimientoStock = async (movimiento) => {
       movimiento.cantidad_nueva,
       movimiento.observaciones
     ]);
-    
+
   } catch (error) {
     console.error('❌ Error en registrarMovimientoStock:', error.message);
   } finally {
@@ -1515,24 +1519,24 @@ export default {
   crearMedicina,
   actualizarMedicina,
   eliminarMedicina,
-  
+
   // Consultas específicas
   obtenerMedicinasHoy,
   obtenerMedicinasFrecuentes,
   obtenerMedicinasPorFrecuencia,
   obtenerMedicinasStockBajo,
   buscarMedicinas,
-  
+
   // Registros y seguimiento
   marcarMedicinaTomada,
   obtenerRegistrosMedicina,
-  
+
   // Gestión de stock
   actualizarStockMedicina,
-  
+
   // Estadísticas y reportes
   obtenerEstadisticasMedicinas,
-  
+
   // Utilidades
   obtenerMedicamentosPredefinidos
 };
