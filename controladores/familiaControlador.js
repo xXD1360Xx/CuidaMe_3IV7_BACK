@@ -9,12 +9,12 @@ import crypto from 'crypto';
  */
 export const obtenerGrupoFamiliar = async (usuarioId) => {
   let client;
-  
+
   try {
     console.log('👨‍👩‍👧‍👦 [FAMILIA] Obteniendo grupo familiar para usuario:', usuarioId);
-    
+
     client = await pool.connect();
-    
+
     // Obtener grupo familiar del usuario
     const query = `
       SELECT 
@@ -42,19 +42,19 @@ export const obtenerGrupoFamiliar = async (usuarioId) => {
         AND gf.activo = true
       GROUP BY gf.id, u_admin.id, ug.rol_en_grupo
     `;
-    
+
     const result = await client.query(query, [usuarioId]);
-    
+
     if (result.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No perteneces a ningún grupo familiar activo',
         codigo: 'SIN_GRUPO'
       };
     }
-    
+
     const grupo = result.rows[0];
-    
+
     // Obtener miembros del grupo
     const miembrosQuery = `
       SELECT 
@@ -87,10 +87,10 @@ export const obtenerGrupoFamiliar = async (usuarioId) => {
         END,
         u.nombre
     `;
-    
+
     const miembrosResult = await client.query(miembrosQuery, [grupo.id]);
     grupo.miembros = miembrosResult.rows;
-    
+
     // Obtener adulto mayor asociado si existe
     if (grupo.tiene_adulto_mayor) {
       const adultoMayorQuery = `
@@ -108,21 +108,21 @@ export const obtenerGrupoFamiliar = async (usuarioId) => {
         WHERE grupo_familiar_id = $1
         LIMIT 1
       `;
-      
+
       const adultoResult = await client.query(adultoMayorQuery, [grupo.id]);
       grupo.adulto_mayor = adultoResult.rows[0] || null;
     }
-    
+
     return {
       exito: true,
       grupo,
       mensaje: 'Grupo familiar obtenido exitosamente'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerGrupoFamiliar:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error al obtener grupo familiar',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -138,12 +138,12 @@ export const obtenerGrupoFamiliar = async (usuarioId) => {
  */
 export const obtenerCodigoFamiliar = async (usuarioId) => {
   let client;
-  
+
   try {
     console.log('🔑 [FAMILIA] Obteniendo código familiar para usuario:', usuarioId);
-    
+
     client = await pool.connect();
-    
+
     // Verificar que el usuario pertenece a un grupo
     const grupoQuery = `
       SELECT gf.id, gf.codigo_familiar, ug.rol_en_grupo
@@ -153,38 +153,38 @@ export const obtenerCodigoFamiliar = async (usuarioId) => {
         AND ug.estado = 'activo'
         AND gf.activo = true
     `;
-    
+
     const grupoResult = await client.query(grupoQuery, [usuarioId]);
-    
+
     if (grupoResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No perteneces a ningún grupo familiar',
         codigo: 'SIN_GRUPO'
       };
     }
-    
+
     const grupo = grupoResult.rows[0];
-    
+
     // Solo administradores pueden ver el código
     if (grupo.rol_en_grupo !== 'admin' && grupo.rol_en_grupo !== 'responsable') {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'Solo los administradores pueden ver el código familiar',
         codigo: 'SIN_PERMISOS'
       };
     }
-    
+
     return {
       exito: true,
       codigo: grupo.codigo_familiar,
       mensaje: 'Código familiar obtenido exitosamente'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerCodigoFamiliar:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error al obtener código familiar',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -200,12 +200,12 @@ export const obtenerCodigoFamiliar = async (usuarioId) => {
  */
 export const regenerarCodigoFamiliar = async (usuarioId) => {
   let client;
-  
+
   try {
     console.log('🔄 [FAMILIA] Regenerando código familiar para usuario:', usuarioId);
-    
+
     client = await pool.connect();
-    
+
     // Verificar que el usuario es administrador del grupo
     const grupoQuery = `
       SELECT gf.id, gf.codigo_familiar
@@ -216,55 +216,55 @@ export const regenerarCodigoFamiliar = async (usuarioId) => {
         AND ug.estado = 'activo'
         AND gf.activo = true
     `;
-    
+
     const grupoResult = await client.query(grupoQuery, [usuarioId]);
-    
+
     if (grupoResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No tienes permisos para regenerar el código',
         codigo: 'SIN_PERMISOS'
       };
     }
-    
+
     const grupo = grupoResult.rows[0];
-    
+
     // Generar nuevo código de 6 caracteres
     const caracteres = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let codigo;
     let codigoUnico = false;
     let intentos = 0;
-    
+
     while (!codigoUnico && intentos < 10) {
       codigo = '';
       for (let i = 0; i < 6; i++) {
         codigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
       }
-      
+
       const codigoCheck = await client.query(
         'SELECT id FROM grupos_familiares WHERE codigo_familiar = $1 AND id != $2',
         [codigo, grupo.id]
       );
-      
+
       if (codigoCheck.rows.length === 0) {
         codigoUnico = true;
       }
-      
+
       intentos++;
     }
-    
+
     if (!codigoUnico) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No se pudo generar un código único',
         codigo: 'ERROR_GENERACION_CODIGO'
       };
     }
-    
+
     // Actualizar código y extender expiración
     const fechaExpiracion = new Date();
     fechaExpiracion.setDate(fechaExpiracion.getDate() + 7); // 7 días
-    
+
     await client.query(`
       UPDATE grupos_familiares 
       SET codigo_familiar = $1,
@@ -272,7 +272,7 @@ export const regenerarCodigoFamiliar = async (usuarioId) => {
           actualizado_en = NOW()
       WHERE id = $3
     `, [codigo, fechaExpiracion, grupo.id]);
-    
+
     // Inactivar códigos personalizados anteriores
     await client.query(`
       UPDATE codigos_personalizados 
@@ -280,18 +280,18 @@ export const regenerarCodigoFamiliar = async (usuarioId) => {
           actualizado_en = NOW()
       WHERE grupo_familiar_id = $1
     `, [grupo.id]);
-    
+
     return {
       exito: true,
       codigo: codigo,
       fecha_expiracion: fechaExpiracion,
       mensaje: 'Código familiar regenerado exitosamente'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en regenerarCodigoFamiliar:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error al regenerar código familiar',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -309,31 +309,31 @@ export const regenerarCodigoFamiliar = async (usuarioId) => {
  */
 export const obtenerFamiliares = async (usuarioId) => {
   let client;
-  
+
   try {
     console.log('👥 [FAMILIA] Obteniendo familiares para usuario:', usuarioId);
-    
+
     client = await pool.connect();
-    
+
     // Primero, determinar el grupo familiar del usuario
     const grupoQuery = `
       SELECT ug.grupo_familiar_id
       FROM usuario_grupo ug
       WHERE ug.usuario_id = $1 AND ug.estado = 'activo'
     `;
-    
+
     const grupoResult = await client.query(grupoQuery, [usuarioId]);
-    
+
     if (grupoResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'Usuario no pertenece a ningún grupo familiar',
         codigo: 'SIN_GRUPO'
       };
     }
-    
+
     const grupoId = grupoResult.rows[0].grupo_familiar_id;
-    
+
     // Obtener todos los usuarios del grupo
     const familiaresQuery = `
       SELECT 
@@ -366,9 +366,9 @@ export const obtenerFamiliares = async (usuarioId) => {
         END,
         u.nombre
     `;
-    
+
     const familiaresResult = await client.query(familiaresQuery, [grupoId]);
-    
+
     // Obtener información del adulto mayor asociado (si existe)
     const adultoMayorQuery = `
       SELECT 
@@ -385,9 +385,9 @@ export const obtenerFamiliares = async (usuarioId) => {
       WHERE grupo_familiar_id = $1
       LIMIT 1
     `;
-    
+
     const adultoMayorResult = await client.query(adultoMayorQuery, [grupoId]);
-    
+
     return {
       exito: true,
       familiares: familiaresResult.rows,
@@ -395,11 +395,11 @@ export const obtenerFamiliares = async (usuarioId) => {
       total_familiares: familiaresResult.rows.length,
       mensaje: 'Familiares obtenidos exitosamente'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerFamiliares:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error al obtener familiares',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -415,24 +415,24 @@ export const obtenerFamiliares = async (usuarioId) => {
  */
 export const crearFamiliar = async (adminId, datosFamiliar) => {
   let client;
-  
+
   try {
     console.log('👥 [FAMILIA] Agregando familiar por administrador:', adminId);
-    
-    const { 
-      nombre, 
-      apellido, 
-      email, 
-      telefono, 
-      fecha_nacimiento, 
-      genero, 
-      parentesco, 
+
+    const {
+      nombre,
+      apellido,
+      email,
+      telefono,
+      fecha_nacimiento,
+      genero,
+      parentesco,
       rol = 'familiar_secundario',
       relacion_adulto_mayor = ''
     } = datosFamiliar;
-    
+
     client = await pool.connect();
-    
+
     // Verificar que el administrador tiene grupo activo
     const grupoCheck = await client.query(`
       SELECT gf.id, gf.max_integrantes, COUNT(ug.usuario_id) as miembros_actuales
@@ -444,66 +444,66 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
         AND gf.activo = true
       GROUP BY gf.id
     `, [adminId]);
-    
+
     if (grupoCheck.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No tienes permisos para agregar familiares',
         codigo: 'SIN_PERMISOS'
       };
     }
-    
+
     const { id: grupoId, max_integrantes, miembros_actuales } = grupoCheck.rows[0];
-    
+
     // Verificar límite de integrantes
     if (miembros_actuales >= max_integrantes) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: `El grupo ha alcanzado el límite máximo de ${max_integrantes} integrantes`,
         codigo: 'GRUPO_LLENO'
       };
     }
-    
+
     // Verificar si el email ya está registrado
     let usuarioId;
     let nuevoUsuario = false;
-    
+
     if (email) {
       const usuarioResult = await client.query(
         'SELECT id FROM usuarios WHERE LOWER(email) = LOWER($1) AND estado = $2',
         [email, 'activo']
       );
-      
+
       if (usuarioResult.rows.length > 0) {
         usuarioId = usuarioResult.rows[0].id;
-        
+
         // Verificar si ya está en el grupo
         const enGrupoCheck = await client.query(
           `SELECT id FROM usuario_grupo 
            WHERE usuario_id = $1 AND grupo_familiar_id = $2 AND estado = $3`,
           [usuarioId, grupoId, 'activo']
         );
-        
+
         if (enGrupoCheck.rows.length > 0) {
-          return { 
-            exito: false, 
+          return {
+            exito: false,
             error: 'Este usuario ya está en el grupo familiar',
             codigo: 'USUARIO_EN_GRUPO'
           };
         }
       }
     }
-    
+
     // Crear usuario si no existe
     if (!usuarioId) {
       if (!nombre) {
-        return { 
-          exito: false, 
+        return {
+          exito: false,
           error: 'Debes proporcionar un nombre para el nuevo familiar',
           codigo: 'NOMBRE_REQUERIDO'
         };
       }
-      
+
       // Generar password temporal
       const passwordTemporal = Math.random().toString(36).slice(-8);
       const passwordHash = crypto
@@ -511,7 +511,7 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
         .update(passwordTemporal)
         .digest('hex')
         .toLowerCase();
-      
+
       const insertUsuarioQuery = `
         INSERT INTO usuarios (
           nombre,
@@ -529,7 +529,7 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, false, 'activo', NOW())
         RETURNING id, nombre, email, telefono, rol
       `;
-      
+
       const usuarioResult = await client.query(insertUsuarioQuery, [
         nombre,
         apellido || null,
@@ -541,11 +541,11 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
         parentesco || null,
         rol
       ]);
-      
+
       usuarioId = usuarioResult.rows[0].id;
       nuevoUsuario = true;
     }
-    
+
     // Asociar usuario al grupo
     const permisos = {
       ver_medicamentos: true,
@@ -553,7 +553,7 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
       ver_gastos: rol === 'responsable' || rol === 'familiar_admin',
       administrar_grupo: rol === 'familiar_admin'
     };
-    
+
     await client.query(`
       INSERT INTO usuario_grupo (
         usuario_id,
@@ -566,14 +566,14 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
         relacion_adulto_mayor
       ) VALUES ($1, $2, $3, 'activo', $4, $5, NOW(), $6)
     `, [
-      usuarioId, 
-      grupoId, 
+      usuarioId,
+      grupoId,
       rol === 'familiar_admin' ? 'admin' : 'familiar',
       JSON.stringify(permisos),
       adminId,
       relacion_adulto_mayor || null
     ]);
-    
+
     return {
       exito: true,
       usuario_id: usuarioId,
@@ -581,20 +581,20 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
       password_temporal: nuevoUsuario ? passwordTemporal : undefined,
       mensaje: 'Familiar agregado exitosamente al grupo'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en crearFamiliar:', error.message);
-    
+
     if (error.code === '23505') { // Violación de unique constraint
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'El usuario ya existe en el sistema',
         codigo: 'USUARIO_DUPLICADO'
       };
     }
-    
-    return { 
-      exito: false, 
+
+    return {
+      exito: false,
       error: 'Error al agregar familiar',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -610,12 +610,12 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
  */
 export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => {
   let client;
-  
+
   try {
     console.log('✏️ [FAMILIA] Actualizando familiar:', familiarId);
-    
+
     client = await pool.connect();
-    
+
     // Verificar permisos del administrador
     const permisoCheck = await client.query(`
       SELECT ug.grupo_familiar_id 
@@ -624,37 +624,37 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
         AND ug.rol_en_grupo IN ('admin', 'responsable')
         AND ug.estado = 'activo'
     `, [adminId]);
-    
+
     if (permisoCheck.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No tienes permisos para actualizar familiares',
         codigo: 'SIN_PERMISOS'
       };
     }
-    
+
     const grupoId = permisoCheck.rows[0].grupo_familiar_id;
-    
+
     // Verificar que el familiar pertenece al mismo grupo
     const familiarCheck = await client.query(`
       SELECT ug.id FROM usuario_grupo ug
       WHERE ug.usuario_id = $1 
         AND ug.grupo_familiar_id = $2
     `, [familiarId, grupoId]);
-    
+
     if (familiarCheck.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'El familiar no pertenece a tu grupo familiar',
         codigo: 'FAMILIAR_NO_ENCONTRADO'
       };
     }
-    
+
     // Preparar actualización
     const valores = [];
     const partesQuery = [];
     let contador = 1;
-    
+
     const campos = [
       { nombre: 'nombre', valor: datosFamiliar.nombre },
       { nombre: 'apellido', valor: datosFamiliar.apellido },
@@ -663,7 +663,7 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
       { nombre: 'genero', valor: datosFamiliar.genero },
       { nombre: 'parentesco', valor: datosFamiliar.parentesco }
     ];
-    
+
     campos.forEach(campo => {
       if (campo.valor !== undefined) {
         partesQuery.push(`${campo.nombre} = $${contador}`);
@@ -671,7 +671,7 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
         contador++;
       }
     });
-    
+
     // Actualizar rol_en_grupo si se proporciona
     if (datosFamiliar.rol_en_grupo) {
       await client.query(`
@@ -680,7 +680,7 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
         WHERE usuario_id = $2 AND grupo_familiar_id = $3
       `, [datosFamiliar.rol_en_grupo, familiarId, grupoId]);
     }
-    
+
     // Actualizar relación con adulto mayor si se proporciona
     if (datosFamiliar.relacion_adulto_mayor !== undefined) {
       await client.query(`
@@ -689,18 +689,18 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
         WHERE usuario_id = $2 AND grupo_familiar_id = $3
       `, [datosFamiliar.relacion_adulto_mayor, familiarId, grupoId]);
     }
-    
+
     // Si no hay nada que actualizar en la tabla usuarios
     if (partesQuery.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No se proporcionaron datos para actualizar',
         codigo: 'DATOS_INCOMPLETOS'
       };
     }
-    
+
     valores.push(familiarId);
-    
+
     const query = `
       UPDATE usuarios 
       SET ${partesQuery.join(', ')}, actualizado_en = NOW()
@@ -719,19 +719,19 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
         creado_en,
         actualizado_en
     `;
-    
+
     const result = await client.query(query, valores);
-    
+
     return {
       exito: true,
       familiar: result.rows[0],
       mensaje: 'Familiar actualizado exitosamente'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en actualizarFamiliar:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error al actualizar familiar',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -747,12 +747,12 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
  */
 export const eliminarFamiliar = async (adminId, familiarId) => {
   let client;
-  
+
   try {
     console.log('🗑️ [FAMILIA] Eliminando familiar:', familiarId);
-    
+
     client = await pool.connect();
-    
+
     // Verificar permisos del administrador
     const permisoCheck = await client.query(`
       SELECT ug.grupo_familiar_id 
@@ -761,17 +761,17 @@ export const eliminarFamiliar = async (adminId, familiarId) => {
         AND ug.rol_en_grupo IN ('admin', 'responsable')
         AND ug.estado = 'activo'
     `, [adminId]);
-    
+
     if (permisoCheck.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No tienes permisos para eliminar familiares',
         codigo: 'SIN_PERMISOS'
       };
     }
-    
+
     const grupoId = permisoCheck.rows[0].grupo_familiar_id;
-    
+
     // Verificar que el familiar pertenece al mismo grupo
     const familiarCheck = await client.query(`
       SELECT ug.id, ug.rol_en_grupo 
@@ -779,17 +779,17 @@ export const eliminarFamiliar = async (adminId, familiarId) => {
       WHERE ug.usuario_id = $1 
         AND ug.grupo_familiar_id = $2
     `, [familiarId, grupoId]);
-    
+
     if (familiarCheck.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'El familiar no pertenece a tu grupo familiar',
         codigo: 'FAMILIAR_NO_ENCONTRADO'
       };
     }
-    
+
     const familiarData = familiarCheck.rows[0];
-    
+
     // No permitir eliminar administradores
     if (familiarData.rol_en_grupo === 'admin') {
       // Contar cuántos administradores quedan
@@ -800,32 +800,32 @@ export const eliminarFamiliar = async (adminId, familiarId) => {
           AND rol_en_grupo = 'admin'
           AND estado = 'activo'
       `, [grupoId]);
-      
+
       if (parseInt(adminCount.rows[0].count) <= 1) {
-        return { 
-          exito: false, 
+        return {
+          exito: false,
           error: 'No puedes eliminar al único administrador del grupo',
           codigo: 'UNICO_ADMIN'
         };
       }
     }
-    
+
     // Eliminar usuario del grupo (borrado lógico)
     await client.query(`
       UPDATE usuario_grupo 
       SET estado = 'inactivo', actualizado_en = NOW()
       WHERE usuario_id = $1 AND grupo_familiar_id = $2
     `, [familiarId, grupoId]);
-    
+
     return {
       exito: true,
       mensaje: 'Familiar eliminado del grupo exitosamente'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en eliminarFamiliar:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error al eliminar familiar',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -843,12 +843,12 @@ export const eliminarFamiliar = async (adminId, familiarId) => {
  */
 export const obtenerCodigosPersonalizados = async (usuarioId) => {
   let client;
-  
+
   try {
     console.log('🔑 [FAMILIA] Obteniendo códigos personalizados para usuario:', usuarioId);
-    
+
     client = await pool.connect();
-    
+
     // Verificar que el usuario es administrador del grupo
     const grupoQuery = `
       SELECT gf.id 
@@ -859,19 +859,19 @@ export const obtenerCodigosPersonalizados = async (usuarioId) => {
         AND ug.estado = 'activo'
         AND gf.activo = true
     `;
-    
+
     const grupoResult = await client.query(grupoQuery, [usuarioId]);
-    
+
     if (grupoResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No tienes permisos para ver códigos personalizados',
         codigo: 'SIN_PERMISOS'
       };
     }
-    
+
     const grupoId = grupoResult.rows[0].id;
-    
+
     // Obtener códigos personalizados activos
     const codigosQuery = `
       SELECT 
@@ -900,20 +900,20 @@ export const obtenerCodigosPersonalizados = async (usuarioId) => {
       WHERE cp.grupo_familiar_id = $1
       ORDER BY cp.creado_en DESC
     `;
-    
+
     const codigosResult = await client.query(codigosQuery, [grupoId]);
-    
+
     return {
       exito: true,
       codigos: codigosResult.rows,
       total_codigos: codigosResult.rows.length,
       mensaje: 'Códigos personalizados obtenidos exitosamente'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerCodigosPersonalizados:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error al obtener códigos personalizados',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -929,30 +929,30 @@ export const obtenerCodigosPersonalizados = async (usuarioId) => {
  */
 export const crearCodigoPersonalizado = async (usuarioId, datosCodigo) => {
   let client;
-  
+
   try {
     console.log('✨ [FAMILIA] Creando código personalizado para usuario:', usuarioId);
-    
-    const { 
-      nombre, 
-      apellido, 
-      parentesco, 
+
+    const {
+      nombre,
+      apellido,
+      parentesco,
       rol_asignado = 'familiar',
       descripcion = '',
       max_usos = 1,
       fecha_expiracion = null
     } = datosCodigo;
-    
+
     if (!nombre) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'El nombre es requerido',
         codigo: 'NOMBRE_REQUERIDO'
       };
     }
-    
+
     client = await pool.connect();
-    
+
     // Verificar que el usuario es administrador del grupo
     const grupoQuery = `
       SELECT gf.id 
@@ -963,51 +963,51 @@ export const crearCodigoPersonalizado = async (usuarioId, datosCodigo) => {
         AND ug.estado = 'activo'
         AND gf.activo = true
     `;
-    
+
     const grupoResult = await client.query(grupoQuery, [usuarioId]);
-    
+
     if (grupoResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No tienes permisos para crear códigos personalizados',
         codigo: 'SIN_PERMISOS'
       };
     }
-    
+
     const grupoId = grupoResult.rows[0].id;
-    
+
     // Generar código único de 6 caracteres
     const caracteres = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let codigo;
     let codigoUnico = false;
     let intentos = 0;
-    
+
     while (!codigoUnico && intentos < 10) {
       codigo = '';
       for (let i = 0; i < 6; i++) {
         codigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
       }
-      
+
       const codigoCheck = await client.query(
         'SELECT id FROM codigos_personalizados WHERE codigo = $1',
         [codigo]
       );
-      
+
       if (codigoCheck.rows.length === 0) {
         codigoUnico = true;
       }
-      
+
       intentos++;
     }
-    
+
     if (!codigoUnico) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No se pudo generar un código único',
         codigo: 'ERROR_GENERACION_CODIGO'
       };
     }
-    
+
     // Crear código personalizado
     const insertQuery = `
       INSERT INTO codigos_personalizados (
@@ -1027,11 +1027,11 @@ export const crearCodigoPersonalizado = async (usuarioId, datosCodigo) => {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, NOW())
       RETURNING *
     `;
-    
-    const permisos = rol_asignado === 'familiar_admin' 
+
+    const permisos = rol_asignado === 'familiar_admin'
       ? '{"ver_medicamentos": true, "ver_calendario": true, "ver_gastos": true, "administrar_grupo": true}'
       : '{"ver_medicamentos": true, "ver_calendario": true}';
-    
+
     const result = await client.query(insertQuery, [
       grupoId,
       codigo,
@@ -1045,26 +1045,26 @@ export const crearCodigoPersonalizado = async (usuarioId, datosCodigo) => {
       fecha_expiracion,
       permisos
     ]);
-    
+
     return {
       exito: true,
       codigo: result.rows[0],
       mensaje: 'Código personalizado creado exitosamente'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en crearCodigoPersonalizado:', error.message);
-    
+
     if (error.code === '23505') { // Violación de unique constraint
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'El código ya existe, intenta generar otro',
         codigo: 'CODIGO_DUPLICADO'
       };
     }
-    
-    return { 
-      exito: false, 
+
+    return {
+      exito: false,
       error: 'Error al crear código personalizado',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -1080,12 +1080,12 @@ export const crearCodigoPersonalizado = async (usuarioId, datosCodigo) => {
  */
 export const eliminarCodigoPersonalizado = async (usuarioId, codigoId) => {
   let client;
-  
+
   try {
     console.log('🗑️ [FAMILIA] Eliminando código personalizado:', codigoId);
-    
+
     client = await pool.connect();
-    
+
     // Verificar que el usuario es administrador del grupo
     const grupoQuery = `
       SELECT gf.id 
@@ -1096,46 +1096,46 @@ export const eliminarCodigoPersonalizado = async (usuarioId, codigoId) => {
         AND ug.estado = 'activo'
         AND gf.activo = true
     `;
-    
+
     const grupoResult = await client.query(grupoQuery, [usuarioId]);
-    
+
     if (grupoResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No tienes permisos para eliminar códigos personalizados',
         codigo: 'SIN_PERMISOS'
       };
     }
-    
+
     const grupoId = grupoResult.rows[0].id;
-    
+
     // Verificar que el código pertenece al grupo
     const codigoCheck = await client.query(`
       SELECT id FROM codigos_personalizados 
       WHERE id = $1 AND grupo_familiar_id = $2
     `, [codigoId, grupoId]);
-    
+
     if (codigoCheck.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'Código no encontrado en tu grupo',
         codigo: 'CODIGO_NO_ENCONTRADO'
       };
     }
-    
+
     // Eliminar código (borrado físico porque aún no se ha usado)
     await client.query(`
       DELETE FROM codigos_personalizados 
       WHERE id = $1 AND grupo_familiar_id = $2 AND usos_actuales = 0
     `, [codigoId, grupoId]);
-    
+
     // Si se había usado, desactivarlo
     const deleteResult = await client.query(`
       DELETE FROM codigos_personalizados 
       WHERE id = $1 AND grupo_familiar_id = $2
       RETURNING id
     `, [codigoId, grupoId]);
-    
+
     if (deleteResult.rows.length === 0) {
       // Si no se pudo eliminar porque ya fue usado, desactivarlo
       await client.query(`
@@ -1144,16 +1144,16 @@ export const eliminarCodigoPersonalizado = async (usuarioId, codigoId) => {
         WHERE id = $1 AND grupo_familiar_id = $2
       `, [codigoId, grupoId]);
     }
-    
+
     return {
       exito: true,
       mensaje: 'Código personalizado eliminado exitosamente'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en eliminarCodigoPersonalizado:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error al eliminar código personalizado',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -1171,12 +1171,12 @@ export const eliminarCodigoPersonalizado = async (usuarioId, codigoId) => {
  */
 export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
   let client;
-  
+
   try {
-    console.log('👴 [FAMILIA] Actualizando adulto mayor para usuario:', usuarioId);
-    
+    console.log('👴 [FAMILIA] Actualizando adulto mayor para usuario ID:', usuarioId);
+
     client = await pool.connect();
-    
+
     // Verificar que el usuario es administrador del grupo
     const grupoQuery = `
       SELECT gf.id 
@@ -1187,19 +1187,19 @@ export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
         AND ug.estado = 'activo'
         AND gf.activo = true
     `;
-    
+
     const grupoResult = await client.query(grupoQuery, [usuarioId]);
-    
+
     if (grupoResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No tienes permisos para gestionar el adulto mayor',
         codigo: 'SIN_PERMISOS'
       };
     }
-    
+
     const grupoId = grupoResult.rows[0].id;
-    
+
     const {
       nombre,
       fecha_nacimiento,
@@ -1214,22 +1214,22 @@ export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
       direccion,
       notas_medicas
     } = datosAdultoMayor;
-    
+
     if (!nombre || !fecha_nacimiento) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'Nombre y fecha de nacimiento son requeridos',
         codigo: 'DATOS_INCOMPLETOS'
       };
     }
-    
+
     // Verificar si ya existe un adulto mayor en el grupo
     const existeAdultoMayor = await client.query(`
       SELECT id FROM adultos_mayores WHERE grupo_familiar_id = $1
     `, [grupoId]);
-    
+
     let resultado;
-    
+
     if (existeAdultoMayor.rows.length > 0) {
       // Actualizar adulto mayor existente
       const updateQuery = `
@@ -1250,7 +1250,7 @@ export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
         WHERE grupo_familiar_id = $13
         RETURNING *
       `;
-      
+
       resultado = await client.query(updateQuery, [
         nombre,
         fecha_nacimiento,
@@ -1266,7 +1266,7 @@ export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
         notas_medicas || null,
         grupoId
       ]);
-      
+
     } else {
       // Crear nuevo adulto mayor
       const insertQuery = `
@@ -1289,7 +1289,7 @@ export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
         RETURNING *
       `;
-      
+
       resultado = await client.query(insertQuery, [
         grupoId,
         nombre,
@@ -1306,19 +1306,38 @@ export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
         notas_medicas || null
       ]);
     }
-    
+
+    // ============================================================
+    // 🔥 AQUÍ SE INSERTA EL BLOQUE NUEVO (después de obtener resultado)
+    // ============================================================
+    const adulto_mayor_id = resultado.rows[0].id;
+
+    // Verificar si ya existe relación en familiares
+    const familiarCheck = await client.query(
+      'SELECT id FROM familiares WHERE usuario_id = $1 AND adulto_mayor_id = $2',
+      [usuarioId, adulto_mayor_id]
+    );
+
+    if (familiarCheck.rows.length === 0) {
+      await client.query(`
+        INSERT INTO familiares (usuario_id, adulto_mayor_id, es_principal, rol_familiar, parentesco)
+        VALUES ($1, $2, true, 'familiar_admin', 'Familiar')
+      `, [usuarioId, adulto_mayor_id]);
+    }
+    // ============================================================
+
     return {
       exito: true,
       adulto_mayor: resultado.rows[0],
-      mensaje: existeAdultoMayor.rows.length > 0 
+      mensaje: existeAdultoMayor.rows.length > 0
         ? 'Información del adulto mayor actualizada exitosamente'
         : 'Adulto mayor registrado exitosamente'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en actualizarAdultoMayor:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error al actualizar información del adulto mayor',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -1334,31 +1353,31 @@ export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
  */
 export const obtenerAdultoMayor = async (usuarioId) => {
   let client;
-  
+
   try {
     console.log('👴 [FAMILIA] Obteniendo adulto mayor para usuario:', usuarioId);
-    
+
     client = await pool.connect();
-    
+
     // Obtener grupo familiar del usuario
     const grupoQuery = `
       SELECT ug.grupo_familiar_id 
       FROM usuario_grupo ug
       WHERE ug.usuario_id = $1 AND ug.estado = 'activo'
     `;
-    
+
     const grupoResult = await client.query(grupoQuery, [usuarioId]);
-    
+
     if (grupoResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No perteneces a ningún grupo familiar',
         codigo: 'SIN_GRUPO'
       };
     }
-    
+
     const grupoId = grupoResult.rows[0].grupo_familiar_id;
-    
+
     // Obtener información del adulto mayor
     const adultoMayorQuery = `
       SELECT 
@@ -1381,27 +1400,27 @@ export const obtenerAdultoMayor = async (usuarioId) => {
       WHERE grupo_familiar_id = $1
       LIMIT 1
     `;
-    
+
     const adultoMayorResult = await client.query(adultoMayorQuery, [grupoId]);
-    
+
     if (adultoMayorResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No hay adulto mayor registrado en el grupo',
         codigo: 'NO_ADULTO_MAYOR'
       };
     }
-    
+
     return {
       exito: true,
       adulto_mayor: adultoMayorResult.rows[0],
       mensaje: 'Información del adulto mayor obtenida exitosamente'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerAdultoMayor:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error al obtener información del adulto mayor',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -1419,18 +1438,18 @@ export default {
   obtenerGrupoFamiliar,
   obtenerCodigoFamiliar,
   regenerarCodigoFamiliar,
-  
+
   // Familiares
   obtenerFamiliares,
   crearFamiliar,
   actualizarFamiliar,
   eliminarFamiliar,
-  
+
   // Códigos personalizados
   obtenerCodigosPersonalizados,
   crearCodigoPersonalizado,
   eliminarCodigoPersonalizado,
-  
+
   // Adulto mayor
   actualizarAdultoMayor,
   obtenerAdultoMayor

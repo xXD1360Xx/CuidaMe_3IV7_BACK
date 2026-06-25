@@ -857,14 +857,15 @@ export const registrarUsuario = async (datosUsuario) => {
       };
     }
 
+    const rolesPermitidos = ['familiar_admin', 'familiar_secundario', 'familiar_principal', 'familiar', 'profesional', 'anciano'];
     // Validar rol
-    const rolesPermitidos = ['familiar_admin', 'familiar_secundario', 'profesional', 'anciano'];
-    if (!rolesPermitidos.includes(rol)) {
-      return {
-        exito: false,
-        error: `Rol no permitido. Debe ser: ${rolesPermitidos.join(' o ')}`,
-        codigo: 'ROL_INVALIDO'
-      };
+    let rolFinal = rol;
+    if (rolFinal === 'familiar_principal' || rolFinal === 'familiar') {
+      rolFinal = 'familiar_admin';
+    }
+    // Luego en la validación usamos rolFinal
+    if (!rolesPermitidos.includes(rolFinal)) {
+      return { exito: false, error: `Rol no permitido...`, codigo: 'ROL_INVALIDO' };
     }
 
     client = await pool.connect();
@@ -910,7 +911,7 @@ export const registrarUsuario = async (datosUsuario) => {
         username, 
         password, 
         telefono,
-        rol,
+        rolFinal,
         necesita_completar_perfil,
         estado,
         creado_en
@@ -938,6 +939,7 @@ export const registrarUsuario = async (datosUsuario) => {
 
     const nuevoUsuario = result.rows[0];
 
+    // Si se proporcionó código familiar, vincular al grupo
     // Si se proporcionó código familiar, vincular al grupo
     let grupoInfo = null;
     if (codigo_familiar) {
@@ -973,6 +975,65 @@ export const registrarUsuario = async (datosUsuario) => {
           grupoInfo = grupoInfoQuery.rows[0];
         }
       }
+    } else {
+      // Si NO hay código familiar, CREAR GRUPO AUTOMÁTICAMENTE y asignar al usuario como ADMIN
+      // Generar código único de 6 caracteres
+      const caracteres = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let codigoGrupo;
+      let codigoUnico = false;
+      let intentos = 0;
+
+      while (!codigoUnico && intentos < 10) {
+        codigoGrupo = '';
+        for (let i = 0; i < 6; i++) {
+          codigoGrupo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
+        }
+        const codigoCheck = await client.query(
+          'SELECT id FROM grupos_familiares WHERE codigo_familiar = $1',
+          [codigoGrupo]
+        );
+        if (codigoCheck.rows.length === 0) codigoUnico = true;
+        intentos++;
+      }
+
+      if (!codigoUnico) {
+        throw new Error('No se pudo generar código único para el grupo');
+      }
+
+      // Crear grupo
+      const fechaExpiracion = new Date();
+      fechaExpiracion.setDate(fechaExpiracion.getDate() + 30); // 30 días de validez
+
+      const insertGrupo = await client.query(`
+        INSERT INTO grupos_familiares (
+          codigo_familiar,
+          nombre_grupo,
+          usuario_admin_id,
+          fecha_expiracion,
+          activo,
+          max_integrantes
+        ) VALUES ($1, $2, $3, $4, true, 10)
+        RETURNING id, codigo_familiar, nombre_grupo
+      `, [codigoGrupo, `Familia ${nuevoUsuario.nombre}`, nuevoUsuario.id, fechaExpiracion]);
+
+      const grupoCreado = insertGrupo.rows[0];
+
+      // Asignar usuario al grupo como admin
+      await client.query(`
+        INSERT INTO usuario_grupo (
+          usuario_id,
+          grupo_familiar_id,
+          rol_en_grupo,
+          estado,
+          fecha_unio
+        ) VALUES ($1, $2, 'admin', 'activo', NOW())
+      `, [nuevoUsuario.id, grupoCreado.id]);
+
+      grupoInfo = {
+        codigo_familiar: grupoCreado.codigo_familiar,
+        nombre_grupo: grupoCreado.nombre_grupo,
+        admin_nombre: nuevoUsuario.nombre
+      };
     }
 
     // Generar token
