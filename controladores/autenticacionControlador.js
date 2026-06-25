@@ -911,7 +911,7 @@ export const registrarUsuario = async (datosUsuario) => {
         username, 
         password, 
         telefono,
-        rolFinal,
+        rol,
         necesita_completar_perfil,
         estado,
         creado_en
@@ -934,7 +934,7 @@ export const registrarUsuario = async (datosUsuario) => {
       username ? username.trim() : null,
       passwordHash,
       telefono || null,
-      rol
+      rolFinal
     ]);
 
     const nuevoUsuario = result.rows[0];
