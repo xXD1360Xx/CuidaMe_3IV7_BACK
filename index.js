@@ -81,7 +81,11 @@ app.use(cors({
       'https://www.cuidame-app.com',
       'http://localhost:3000',
       'http://localhost:19006',
-      'exp://192.168.1.*:19000'
+      'exp://192.168.1.*:19000',
+      // 🔥 AGREGA ESTO:
+      'https://ueq1jka-divinablasfemia-8081.exp.direct',
+      'https://*.exp.direct', // Para cualquier dominio de Expo (opcional)
+      'https://p01--cuidame--hlm7fxqrj6wz.code.run' // El propio backend
     ];
 
     if (allowedOrigins.indexOf(origin) !== -1) {
