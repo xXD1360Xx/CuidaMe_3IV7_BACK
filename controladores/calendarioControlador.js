@@ -8,12 +8,12 @@ import { pool } from '../configuracion/basedeDatos.js';
  */
 export const obtenerConfiguracionCalendario = async (usuarioId) => {
   let client;
-  
+
   try {
     console.log('📅 [CALENDARIO] Obteniendo configuración para usuario ID:', usuarioId);
-    
+
     client = await pool.connect();
-    
+
     // Obtener el adulto mayor principal del usuario
     const adultoMayorQuery = `
       SELECT am.id 
@@ -23,27 +23,27 @@ export const obtenerConfiguracionCalendario = async (usuarioId) => {
       ORDER BY f.es_principal DESC
       LIMIT 1
     `;
-    
+
     const adultoMayorResult = await client.query(adultoMayorQuery, [usuarioId]);
-    
+
     if (adultoMayorResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No se encontró un adulto mayor asociado',
         codigo: 'ADULTO_NO_ENCONTRADO'
       };
     }
-    
+
     const adulto_mayor_id = adultoMayorResult.rows[0].id;
-    
+
     // Obtener configuración existente
     const configQuery = `
       SELECT * FROM configuracion_calendario 
       WHERE adulto_mayor_id = $1
     `;
-    
+
     const configResult = await client.query(configQuery, [adulto_mayor_id]);
-    
+
     if (configResult.rows.length === 0) {
       // Crear configuración por defecto
       const configPorDefecto = {
@@ -58,9 +58,9 @@ export const obtenerConfiguracionCalendario = async (usuarioId) => {
         recordatorio_minutos: 30,
         color_evento_por_defecto: '#4CAF50'
       };
-      
+
       console.log('ℹ️  Creando configuración por defecto para calendario');
-      
+
       return {
         exito: true,
         configuracion: {
@@ -69,20 +69,20 @@ export const obtenerConfiguracionCalendario = async (usuarioId) => {
         }
       };
     }
-    
+
     const configuracion = configResult.rows[0];
-    
+
     console.log('✅ Configuración de calendario obtenida');
-    
+
     return {
       exito: true,
       configuracion
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerConfiguracionCalendario:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener configuración del calendario',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -98,12 +98,12 @@ export const obtenerConfiguracionCalendario = async (usuarioId) => {
  */
 export const guardarConfiguracionCalendario = async (usuarioId, configuracion) => {
   let client;
-  
+
   try {
     console.log('💾 [CALENDARIO] Guardando configuración por usuario ID:', usuarioId);
-    
+
     client = await pool.connect();
-    
+
     // Obtener el adulto mayor principal del usuario
     const adultoMayorQuery = `
       SELECT am.id 
@@ -113,29 +113,29 @@ export const guardarConfiguracionCalendario = async (usuarioId, configuracion) =
       ORDER BY f.es_principal DESC
       LIMIT 1
     `;
-    
+
     const adultoMayorResult = await client.query(adultoMayorQuery, [usuarioId]);
-    
+
     if (adultoMayorResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No se encontró un adulto mayor asociado',
         codigo: 'ADULTO_NO_ENCONTRADO'
       };
     }
-    
+
     const adulto_mayor_id = adultoMayorResult.rows[0].id;
-    
+
     // Verificar si ya existe configuración
     const checkQuery = `
       SELECT id FROM configuracion_calendario 
       WHERE adulto_mayor_id = $1
     `;
-    
+
     const checkResult = await client.query(checkQuery, [adulto_mayor_id]);
-    
+
     let resultado;
-    
+
     if (checkResult.rows.length > 0) {
       // Actualizar configuración existente
       const updateQuery = `
@@ -154,7 +154,7 @@ export const guardarConfiguracionCalendario = async (usuarioId, configuracion) =
         WHERE adulto_mayor_id = $11
         RETURNING *
       `;
-      
+
       const updateResult = await client.query(updateQuery, [
         configuracion.vista_predeterminada || 'mes',
         configuracion.mostrar_fines_semana !== undefined ? configuracion.mostrar_fines_semana : true,
@@ -168,7 +168,7 @@ export const guardarConfiguracionCalendario = async (usuarioId, configuracion) =
         configuracion.color_evento_por_defecto || '#4CAF50',
         adulto_mayor_id
       ]);
-      
+
       resultado = updateResult.rows[0];
     } else {
       // Insertar nueva configuración
@@ -189,7 +189,7 @@ export const guardarConfiguracionCalendario = async (usuarioId, configuracion) =
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *
       `;
-      
+
       const insertResult = await client.query(insertQuery, [
         adulto_mayor_id,
         configuracion.vista_predeterminada || 'mes',
@@ -203,22 +203,22 @@ export const guardarConfiguracionCalendario = async (usuarioId, configuracion) =
         configuracion.recordatorio_minutos || 30,
         configuracion.color_evento_por_defecto || '#4CAF50'
       ]);
-      
+
       resultado = insertResult.rows[0];
     }
-    
+
     console.log('✅ Configuración del calendario guardada exitosamente');
-    
+
     return {
       exito: true,
       configuracion: resultado,
       mensaje: 'Configuración del calendario guardada correctamente'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en guardarConfiguracionCalendario:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al guardar configuración del calendario',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -236,12 +236,12 @@ export const guardarConfiguracionCalendario = async (usuarioId, configuracion) =
  */
 export const obtenerEventos = async (usuarioId) => {
   let client;
-  
+
   try {
     console.log('📅 [CALENDARIO] Obteniendo eventos para usuario ID:', usuarioId);
-    
+
     client = await pool.connect();
-    
+
     // Obtener todos los adultos mayores asociados al usuario
     const adultosMayoresQuery = `
       SELECT am.id 
@@ -249,9 +249,9 @@ export const obtenerEventos = async (usuarioId) => {
       INNER JOIN familiares f ON am.id = f.adulto_mayor_id
       WHERE f.usuario_id = $1
     `;
-    
+
     const adultosMayoresResult = await client.query(adultosMayoresQuery, [usuarioId]);
-    
+
     if (adultosMayoresResult.rows.length === 0) {
       return {
         exito: true,
@@ -259,9 +259,9 @@ export const obtenerEventos = async (usuarioId) => {
         mensaje: 'No se encontraron adultos mayores asociados'
       };
     }
-    
+
     const adultos_mayores_ids = adultosMayoresResult.rows.map(row => row.id);
-    
+
     // Obtener eventos de todos los adultos mayores asociados
     const query = `
       SELECT 
@@ -281,13 +281,15 @@ export const obtenerEventos = async (usuarioId) => {
         e.recurrente,
         e.recurrencia_patron,
         e.familiar_id,
-        f.nombre as familiar_nombre,
+        u.nombre as familiar_nombre,
         am.nombre as adulto_mayor_nombre,
         e.usuario_id,
         e.creado_en,
         e.actualizado_en
       FROM eventos e
       LEFT JOIN familiares f ON e.familiar_id = f.id
+      LEFT JOIN usuarios u ON f.usuario_id = u.id   -- ✅ Agregar
+
       LEFT JOIN adultos_mayores am ON e.adulto_mayor_id = am.id
       WHERE e.usuario_id = $1
          OR e.adulto_mayor_id = ANY($2::int[])
@@ -296,21 +298,21 @@ export const obtenerEventos = async (usuarioId) => {
          ))
       ORDER BY e.fecha_inicio DESC, e.hora_inicio
     `;
-    
+
     const result = await client.query(query, [usuarioId, adultos_mayores_ids]);
-    
+
     console.log(`✅ Encontrados ${result.rows.length} eventos`);
-    
+
     return {
       exito: true,
       eventos: result.rows,
       total: result.rows.length
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerEventos:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener eventos',
       codigo: 'ERROR_SERVIDOR',
       eventos: []
@@ -327,22 +329,22 @@ export const obtenerEventos = async (usuarioId) => {
  */
 export const obtenerEventosPorRango = async (usuarioId, fechaInicio, fechaFin) => {
   let client;
-  
+
   try {
     console.log('📅 [CALENDARIO] Obteniendo eventos por rango:', fechaInicio, '-', fechaFin);
-    
+
     // Validar formato de fechas
     const fechaRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (!fechaRegex.test(fechaInicio) || !fechaRegex.test(fechaFin)) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'Formato de fecha inválido. Use YYYY-MM-DD',
         codigo: 'FECHA_FORMATO_INVALIDO'
       };
     }
-    
+
     client = await pool.connect();
-    
+
     // Obtener todos los adultos mayores asociados al usuario
     const adultosMayoresQuery = `
       SELECT am.id 
@@ -350,14 +352,14 @@ export const obtenerEventosPorRango = async (usuarioId, fechaInicio, fechaFin) =
       INNER JOIN familiares f ON am.id = f.adulto_mayor_id
       WHERE f.usuario_id = $1
     `;
-    
+
     const adultosMayoresResult = await client.query(adultosMayoresQuery, [usuarioId]);
-    
+
     const eventos = [];
-    
+
     if (adultosMayoresResult.rows.length > 0) {
       const adultos_mayores_ids = adultosMayoresResult.rows.map(row => row.id);
-      
+
       // Obtener eventos en el rango especificado
       const query = `
         SELECT 
@@ -377,12 +379,13 @@ export const obtenerEventosPorRango = async (usuarioId, fechaInicio, fechaFin) =
           e.recurrente,
           e.recurrencia_patron,
           e.familiar_id,
-          f.nombre as familiar_nombre,
+          u.nombre as familiar_nombre,
           am.nombre as adulto_mayor_nombre,
           e.usuario_id,
           e.creado_en
         FROM eventos e
         LEFT JOIN familiares f ON e.familiar_id = f.id
+        LEFT JOIN usuarios u ON f.usuario_id = u.id   
         LEFT JOIN adultos_mayores am ON e.adulto_mayor_id = am.id
         WHERE (
           -- Eventos que empiezan en el rango
@@ -403,17 +406,17 @@ export const obtenerEventosPorRango = async (usuarioId, fechaInicio, fechaFin) =
         )
         ORDER BY e.fecha_inicio, e.hora_inicio
       `;
-      
+
       const result = await client.query(query, [
-        fechaInicio, 
-        fechaFin, 
-        usuarioId, 
+        fechaInicio,
+        fechaFin,
+        usuarioId,
         adultos_mayores_ids
       ]);
-      
+
       eventos.push(...result.rows);
     }
-    
+
     // También obtener eventos creados por el usuario directamente
     const eventosUsuarioQuery = `
       SELECT 
@@ -433,12 +436,13 @@ export const obtenerEventosPorRango = async (usuarioId, fechaInicio, fechaFin) =
         e.recurrente,
         e.recurrencia_patron,
         e.familiar_id,
-        f.nombre as familiar_nombre,
+        u.nombre as familiar_nombre,
         NULL as adulto_mayor_nombre,
         e.usuario_id,
         e.creado_en
       FROM eventos e
       LEFT JOIN familiares f ON e.familiar_id = f.id
+      LEFT JOIN usuarios u ON f.usuario_id = u.id   
       WHERE e.usuario_id = $1
         AND (
           (e.fecha_inicio BETWEEN $2 AND $3)
@@ -447,26 +451,26 @@ export const obtenerEventosPorRango = async (usuarioId, fechaInicio, fechaFin) =
         )
       ORDER BY e.fecha_inicio, e.hora_inicio
     `;
-    
+
     const eventosUsuarioResult = await client.query(eventosUsuarioQuery, [
-      usuarioId, 
-      fechaInicio, 
+      usuarioId,
+      fechaInicio,
       fechaFin
     ]);
-    
+
     // Combinar eventos únicos
     const eventosMap = new Map();
-    
+
     [...eventos, ...eventosUsuarioResult.rows].forEach(evento => {
       if (!eventosMap.has(evento.id)) {
         eventosMap.set(evento.id, evento);
       }
     });
-    
+
     const eventosUnicos = Array.from(eventosMap.values());
-    
+
     console.log(`✅ Encontrados ${eventosUnicos.length} eventos en el rango`);
-    
+
     return {
       exito: true,
       eventos: eventosUnicos,
@@ -474,11 +478,11 @@ export const obtenerEventosPorRango = async (usuarioId, fechaInicio, fechaFin) =
       fecha_fin: fechaFin,
       total: eventosUnicos.length
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerEventosPorRango:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener eventos por rango',
       codigo: 'ERROR_SERVIDOR',
       eventos: []
@@ -496,13 +500,13 @@ export const obtenerEventosPorRango = async (usuarioId, fechaInicio, fechaFin) =
 export const obtenerEventosPorFecha = async (usuarioId, fecha) => {
   try {
     console.log('📅 [CALENDARIO] Obteniendo eventos para fecha:', fecha);
-    
+
     return await obtenerEventosPorRango(usuarioId, fecha, fecha);
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerEventosPorFecha:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener eventos por fecha',
       codigo: 'ERROR_SERVIDOR',
       eventos: []
@@ -515,14 +519,14 @@ export const obtenerEventosPorFecha = async (usuarioId, fecha) => {
  */
 export const obtenerEventosProximos = async (usuarioId, limite = 10) => {
   let client;
-  
+
   try {
     console.log('📅 [CALENDARIO] Obteniendo próximos eventos, límite:', limite);
-    
+
     const hoy = new Date().toISOString().split('T')[0];
-    
+
     client = await pool.connect();
-    
+
     // Obtener todos los adultos mayores asociados al usuario
     const adultosMayoresQuery = `
       SELECT am.id 
@@ -530,15 +534,14 @@ export const obtenerEventosProximos = async (usuarioId, limite = 10) => {
       INNER JOIN familiares f ON am.id = f.adulto_mayor_id
       WHERE f.usuario_id = $1
     `;
-    
+
     const adultosMayoresResult = await client.query(adultosMayoresQuery, [usuarioId]);
-    
+
     const eventos = [];
-    
+
     if (adultosMayoresResult.rows.length > 0) {
       const adultos_mayores_ids = adultosMayoresResult.rows.map(row => row.id);
-      
-      // Obtener eventos próximos (desde hoy en adelante)
+
       const query = `
         SELECT 
           e.id,
@@ -556,12 +559,14 @@ export const obtenerEventosProximos = async (usuarioId, limite = 10) => {
           e.ubicacion,
           e.recurrente,
           e.familiar_id,
-          f.nombre as familiar_nombre,
+          u.nombre as familiar_nombre,  -- ✅ Corregido: de f.nombre a u.nombre
           am.nombre as adulto_mayor_nombre,
           e.usuario_id,
           e.creado_en
         FROM eventos e
         LEFT JOIN familiares f ON e.familiar_id = f.id
+        LEFT JOIN usuarios u ON f.usuario_id = u.id   
+        LEFT JOIN usuarios u ON f.usuario_id = u.id
         LEFT JOIN adultos_mayores am ON e.adulto_mayor_id = am.id
         WHERE (
           e.fecha_inicio >= $1 
@@ -577,17 +582,17 @@ export const obtenerEventosProximos = async (usuarioId, limite = 10) => {
         ORDER BY e.fecha_inicio, e.hora_inicio
         LIMIT $4
       `;
-      
+
       const result = await client.query(query, [
-        hoy, 
-        usuarioId, 
+        hoy,
+        usuarioId,
         adultos_mayores_ids,
         limite
       ]);
-      
+
       eventos.push(...result.rows);
     }
-    
+
     // También obtener eventos del usuario
     const eventosUsuarioQuery = `
       SELECT 
@@ -606,33 +611,35 @@ export const obtenerEventosProximos = async (usuarioId, limite = 10) => {
         e.ubicacion,
         e.recurrente,
         e.familiar_id,
-        f.nombre as familiar_nombre,
+        u.nombre as familiar_nombre,
         NULL as adulto_mayor_nombre,
         e.usuario_id,
         e.creado_en
       FROM eventos e
       LEFT JOIN familiares f ON e.familiar_id = f.id
+      LEFT JOIN usuarios u ON f.usuario_id = u.id   
+      LEFT JOIN usuarios u ON f.usuario_id = u.id
       WHERE e.usuario_id = $1
         AND (e.fecha_inicio >= $2 OR e.fecha_fin >= $2)
       ORDER BY e.fecha_inicio, e.hora_inicio
       LIMIT $3
     `;
-    
+
     const eventosUsuarioResult = await client.query(eventosUsuarioQuery, [
-      usuarioId, 
-      hoy, 
+      usuarioId,
+      hoy,
       limite
     ]);
-    
+
     // Combinar y eliminar duplicados
     const eventosMap = new Map();
-    
+
     [...eventos, ...eventosUsuarioResult.rows].forEach(evento => {
       if (!eventosMap.has(evento.id)) {
         eventosMap.set(evento.id, evento);
       }
     });
-    
+
     const eventosUnicos = Array.from(eventosMap.values())
       .sort((a, b) => {
         const fechaA = new Date(`${a.fecha_inicio}T${a.hora_inicio || '00:00'}`);
@@ -640,20 +647,20 @@ export const obtenerEventosProximos = async (usuarioId, limite = 10) => {
         return fechaA - fechaB;
       })
       .slice(0, limite);
-    
+
     console.log(`✅ Encontrados ${eventosUnicos.length} eventos próximos`);
-    
+
     return {
       exito: true,
       eventos: eventosUnicos,
       fecha_consulta: hoy,
       total: eventosUnicos.length
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerEventosProximos:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener eventos próximos',
       codigo: 'ERROR_SERVIDOR',
       eventos: []
@@ -670,79 +677,79 @@ export const obtenerEventosProximos = async (usuarioId, limite = 10) => {
  */
 export const crearEvento = async (usuarioId, evento) => {
   let client;
-  
+
   try {
     console.log('➕ [CALENDARIO] Creando evento para usuario ID:', usuarioId);
-    
+
     // Validar datos requeridos
     const camposRequeridos = ['titulo', 'fecha_inicio'];
     for (const campo of camposRequeridos) {
       if (!evento[campo]) {
-        return { 
-          exito: false, 
+        return {
+          exito: false,
           error: `El campo ${campo} es requerido`,
           codigo: 'DATOS_INCOMPLETOS'
         };
       }
     }
-    
+
     client = await pool.connect();
-    
+
     let adulto_mayor_id = null;
-    
+
     // Si se proporciona adulto_mayor_id, verificar que el usuario tenga acceso
     if (evento.adulto_mayor_id) {
       const accesoQuery = `
         SELECT 1 FROM familiares 
         WHERE usuario_id = $1 AND adulto_mayor_id = $2
       `;
-      
+
       const accesoResult = await client.query(accesoQuery, [
-        usuarioId, 
+        usuarioId,
         evento.adulto_mayor_id
       ]);
-      
+
       if (accesoResult.rows.length === 0) {
-        return { 
-          exito: false, 
+        return {
+          exito: false,
           error: 'No tienes acceso a este adulto mayor',
           codigo: 'SIN_ACCESO'
         };
       }
-      
+
       adulto_mayor_id = evento.adulto_mayor_id;
     }
-    
+
     // Si se proporciona familiar_id, verificar que pertenezca al usuario
     if (evento.familiar_id) {
       const familiarQuery = `
         SELECT 1 FROM familiares 
         WHERE id = $1 AND usuario_id = $2
       `;
-      
+
       const familiarResult = await client.query(familiarQuery, [
-        evento.familiar_id, 
+        evento.familiar_id,
         usuarioId
       ]);
-      
+
       if (familiarResult.rows.length === 0) {
-        return { 
-          exito: false, 
+        return {
+          exito: false,
           error: 'El familiar no pertenece al usuario',
           codigo: 'FAMILIAR_NO_VALIDO'
         };
       }
     }
-    
+
     // Validar fechas
     if (evento.fecha_fin && evento.fecha_fin < evento.fecha_inicio) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'La fecha de fin no puede ser anterior a la fecha de inicio',
         codigo: 'FECHAS_INVALIDAS'
       };
     }
-    
+
     // Verificar conflicto de eventos
     if (evento.adulto_mayor_id) {
       const conflictQuery = `
@@ -755,23 +762,23 @@ export const crearEvento = async (usuarioId, evento) => {
             OR ($2 <= fecha_inicio AND $3 >= (fecha_fin OR fecha_inicio))
           )
       `;
-      
+
       const conflictResult = await client.query(conflictQuery, [
         adulto_mayor_id,
         evento.fecha_inicio,
         evento.fecha_fin || evento.fecha_inicio
       ]);
-      
+
       if (conflictResult.rows.length > 0 && evento.verificar_conflictos !== false) {
         const conflicto = conflictResult.rows[0];
-        return { 
-          exito: false, 
+        return {
+          exito: false,
           error: `Conflicto de horario con "${conflicto.titulo}"`,
           codigo: 'CONFLICTO_HORARIO'
         };
       }
     }
-    
+
     // Insertar nuevo evento
     const query = `
       INSERT INTO eventos (
@@ -795,7 +802,7 @@ export const crearEvento = async (usuarioId, evento) => {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *
     `;
-    
+
     const values = [
       evento.titulo.trim(),
       evento.tipo_evento || 'cita_medica',
@@ -815,32 +822,32 @@ export const crearEvento = async (usuarioId, evento) => {
       adulto_mayor_id,
       usuarioId
     ];
-    
+
     const result = await client.query(query, values);
-    
+
     const nuevoEvento = result.rows[0];
-    
+
     console.log('✅ Evento creado exitosamente:', nuevoEvento.titulo);
-    
+
     return {
       exito: true,
       evento: nuevoEvento,
       mensaje: 'Evento creado correctamente'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en crearEvento:', error.message);
-    
+
     if (error.code === '23505') {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'El evento ya existe',
         codigo: 'EVENTO_DUPLICADO'
       };
     }
-    
-    return { 
-      exito: false, 
+
+    return {
+      exito: false,
       error: 'Error del servidor al crear evento',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -856,31 +863,31 @@ export const crearEvento = async (usuarioId, evento) => {
  */
 export const actualizarEvento = async (eventoId, usuarioId, evento) => {
   let client;
-  
+
   try {
     console.log('✏️ [CALENDARIO] Actualizando evento ID:', eventoId);
-    
+
     client = await pool.connect();
-    
+
     // Verificar que el evento existe y pertenece al usuario
     const verifyQuery = `
       SELECT e.id, e.usuario_id, e.adulto_mayor_id
       FROM eventos e
       WHERE e.id = $1
     `;
-    
+
     const verifyResult = await client.query(verifyQuery, [eventoId]);
-    
+
     if (verifyResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'Evento no encontrado',
         codigo: 'EVENTO_NO_ENCONTRADO'
       };
     }
-    
+
     const eventoExistente = verifyResult.rows[0];
-    
+
     // Verificar permisos
     if (eventoExistente.usuario_id !== usuarioId) {
       // Si no es el creador, verificar si es familiar del adulto mayor
@@ -889,40 +896,40 @@ export const actualizarEvento = async (eventoId, usuarioId, evento) => {
           SELECT 1 FROM familiares 
           WHERE usuario_id = $1 AND adulto_mayor_id = $2
         `;
-        
+
         const accesoResult = await client.query(accesoQuery, [
-          usuarioId, 
+          usuarioId,
           eventoExistente.adulto_mayor_id
         ]);
-        
+
         if (accesoResult.rows.length === 0) {
-          return { 
-            exito: false, 
+          return {
+            exito: false,
             error: 'No tienes permiso para modificar este evento',
             codigo: 'SIN_PERMISOS'
           };
         }
       } else {
-        return { 
-          exito: false, 
+        return {
+          exito: false,
           error: 'No tienes permiso para modificar este evento',
           codigo: 'SIN_PERMISOS'
         };
       }
     }
-    
+
     // Construir query dinámica
     const updates = [];
     const values = [];
     let paramIndex = 1;
-    
+
     const camposPermitidos = [
       'titulo', 'tipo_evento', 'color_evento', 'fecha_inicio', 'fecha_fin',
       'hora_inicio', 'hora_fin', 'duracion_horas', 'descripcion', 'recordatorio',
       'recordatorio_minutos', 'ubicacion', 'recurrente', 'recurrencia_patron',
       'familiar_id'
     ];
-    
+
     for (const campo of camposPermitidos) {
       if (evento[campo] !== undefined) {
         updates.push(`${campo} = $${paramIndex}`);
@@ -930,40 +937,40 @@ export const actualizarEvento = async (eventoId, usuarioId, evento) => {
         paramIndex++;
       }
     }
-    
+
     if (updates.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'No se proporcionaron datos para actualizar',
         codigo: 'SIN_CAMPOS'
       };
     }
-    
+
     values.push(eventoId);
-    
+
     const query = `
       UPDATE eventos 
       SET ${updates.join(', ')}, actualizado_en = CURRENT_TIMESTAMP
       WHERE id = $${paramIndex}
       RETURNING *
     `;
-    
+
     const result = await client.query(query, values);
-    
+
     const eventoActualizado = result.rows[0];
-    
+
     console.log('✅ Evento actualizado exitosamente');
-    
+
     return {
       exito: true,
       evento: eventoActualizado,
       mensaje: 'Evento actualizado correctamente'
     };
-    
+
   } catch (error) {
     console.error('❌ Error en actualizarEvento:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al actualizar evento',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -979,31 +986,31 @@ export const actualizarEvento = async (eventoId, usuarioId, evento) => {
  */
 export const eliminarEvento = async (eventoId, usuarioId) => {
   let client;
-  
+
   try {
     console.log('🗑️ [CALENDARIO] Eliminando evento ID:', eventoId);
-    
+
     client = await pool.connect();
-    
+
     // Verificar que el evento existe y pertenece al usuario
     const verifyQuery = `
       SELECT e.id, e.usuario_id, e.adulto_mayor_id
       FROM eventos e
       WHERE e.id = $1
     `;
-    
+
     const verifyResult = await client.query(verifyQuery, [eventoId]);
-    
+
     if (verifyResult.rows.length === 0) {
-      return { 
-        exito: false, 
+      return {
+        exito: false,
         error: 'Evento no encontrado',
         codigo: 'EVENTO_NO_ENCONTRADO'
       };
     }
-    
+
     const eventoExistente = verifyResult.rows[0];
-    
+
     // Verificar permisos
     if (eventoExistente.usuario_id !== usuarioId) {
       // Si no es el creador, verificar si es familiar del adulto mayor
@@ -1012,49 +1019,49 @@ export const eliminarEvento = async (eventoId, usuarioId) => {
           SELECT 1 FROM familiares 
           WHERE usuario_id = $1 AND adulto_mayor_id = $2
         `;
-        
+
         const accesoResult = await client.query(accesoQuery, [
-          usuarioId, 
+          usuarioId,
           eventoExistente.adulto_mayor_id
         ]);
-        
+
         if (accesoResult.rows.length === 0) {
-          return { 
-            exito: false, 
+          return {
+            exito: false,
             error: 'No tienes permiso para eliminar este evento',
             codigo: 'SIN_PERMISOS'
           };
         }
       } else {
-        return { 
-          exito: false, 
+        return {
+          exito: false,
           error: 'No tienes permiso para eliminar este evento',
           codigo: 'SIN_PERMISOS'
         };
       }
     }
-    
+
     // Eliminar evento
     const deleteQuery = `
       DELETE FROM eventos 
       WHERE id = $1
       RETURNING id
     `;
-    
+
     const result = await client.query(deleteQuery, [eventoId]);
-    
+
     console.log('✅ Evento eliminado exitosamente');
-    
+
     return {
       exito: true,
       mensaje: 'Evento eliminado correctamente',
       id: result.rows[0].id
     };
-    
+
   } catch (error) {
     console.error('❌ Error en eliminarEvento:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al eliminar evento',
       codigo: 'ERROR_SERVIDOR'
     };
@@ -1070,12 +1077,12 @@ export const eliminarEvento = async (eventoId, usuarioId) => {
  */
 export const obtenerEventosPorTipo = async (usuarioId, tipo) => {
   let client;
-  
+
   try {
     console.log('🏷️ [CALENDARIO] Obteniendo eventos por tipo:', tipo);
-    
+
     client = await pool.connect();
-    
+
     // Obtener todos los adultos mayores asociados al usuario
     const adultosMayoresQuery = `
       SELECT am.id 
@@ -1083,14 +1090,14 @@ export const obtenerEventosPorTipo = async (usuarioId, tipo) => {
       INNER JOIN familiares f ON am.id = f.adulto_mayor_id
       WHERE f.usuario_id = $1
     `;
-    
+
     const adultosMayoresResult = await client.query(adultosMayoresQuery, [usuarioId]);
-    
+
     let eventos = [];
-    
+
     if (adultosMayoresResult.rows.length > 0) {
       const adultos_mayores_ids = adultosMayoresResult.rows.map(row => row.id);
-      
+
       const query = `
         SELECT 
           e.id,
@@ -1108,12 +1115,13 @@ export const obtenerEventosPorTipo = async (usuarioId, tipo) => {
           e.ubicacion,
           e.recurrente,
           e.familiar_id,
-          f.nombre as familiar_nombre,
+          u.nombre as familiar_nombre,
           am.nombre as adulto_mayor_nombre,
           e.usuario_id,
           e.creado_en
         FROM eventos e
         LEFT JOIN familiares f ON e.familiar_id = f.id
+        LEFT JOIN usuarios u ON f.usuario_id = u.id   
         LEFT JOIN adultos_mayores am ON e.adulto_mayor_id = am.id
         WHERE e.tipo_evento = $1
           AND (
@@ -1125,16 +1133,16 @@ export const obtenerEventosPorTipo = async (usuarioId, tipo) => {
           )
         ORDER BY e.fecha_inicio DESC
       `;
-      
+
       const result = await client.query(query, [
-        tipo, 
-        usuarioId, 
+        tipo,
+        usuarioId,
         adultos_mayores_ids
       ]);
-      
+
       eventos = result.rows;
     }
-    
+
     // También obtener eventos del usuario
     const eventosUsuarioQuery = `
       SELECT 
@@ -1153,45 +1161,46 @@ export const obtenerEventosPorTipo = async (usuarioId, tipo) => {
         e.ubicacion,
         e.recurrente,
         e.familiar_id,
-        f.nombre as familiar_nombre,
+        u.nombre as familiar_nombre,
         NULL as adulto_mayor_nombre,
         e.usuario_id,
         e.creado_en
       FROM eventos e
       LEFT JOIN familiares f ON e.familiar_id = f.id
+      LEFT JOIN usuarios u ON f.usuario_id = u.id   
       WHERE e.usuario_id = $1 AND e.tipo_evento = $2
       ORDER BY e.fecha_inicio DESC
     `;
-    
+
     const eventosUsuarioResult = await client.query(eventosUsuarioQuery, [
-      usuarioId, 
+      usuarioId,
       tipo
     ]);
-    
+
     // Combinar eventos únicos
     const eventosMap = new Map();
-    
+
     [...eventos, ...eventosUsuarioResult.rows].forEach(evento => {
       if (!eventosMap.has(evento.id)) {
         eventosMap.set(evento.id, evento);
       }
     });
-    
+
     const eventosUnicos = Array.from(eventosMap.values());
-    
+
     console.log(`✅ Encontrados ${eventosUnicos.length} eventos tipo "${tipo}"`);
-    
+
     return {
       exito: true,
       tipo,
       eventos: eventosUnicos,
       total: eventosUnicos.length
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerEventosPorTipo:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener eventos por tipo',
       codigo: 'ERROR_SERVIDOR',
       eventos: []
@@ -1209,14 +1218,14 @@ export const obtenerEventosPorTipo = async (usuarioId, tipo) => {
 export const obtenerEventosHoy = async (usuarioId) => {
   try {
     console.log('📝 [CALENDARIO] Obteniendo eventos para hoy');
-    
+
     const hoy = new Date().toISOString().split('T')[0];
     return await obtenerEventosPorFecha(usuarioId, hoy);
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerEventosHoy:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener eventos de hoy',
       codigo: 'ERROR_SERVIDOR',
       eventos: []
@@ -1229,16 +1238,16 @@ export const obtenerEventosHoy = async (usuarioId) => {
  */
 export const obtenerEstadisticasEventos = async (usuarioId, fechaInicio = null, fechaFin = null) => {
   let client;
-  
+
   try {
     console.log('📊 [CALENDARIO] Obteniendo estadísticas de eventos');
-    
+
     const hoy = new Date();
     const inicioMes = fechaInicio || new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0];
     const finMes = fechaFin || new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).toISOString().split('T')[0];
-    
+
     client = await pool.connect();
-    
+
     // Obtener todos los adultos mayores asociados al usuario
     const adultosMayoresQuery = `
       SELECT am.id 
@@ -1246,13 +1255,13 @@ export const obtenerEstadisticasEventos = async (usuarioId, fechaInicio = null, 
       INNER JOIN familiares f ON am.id = f.adulto_mayor_id
       WHERE f.usuario_id = $1
     `;
-    
+
     const adultosMayoresResult = await client.query(adultosMayoresQuery, [usuarioId]);
-    
-    const adultos_mayores_ids = adultosMayoresResult.rows.length > 0 
-      ? adultosMayoresResult.rows.map(row => row.id) 
+
+    const adultos_mayores_ids = adultosMayoresResult.rows.length > 0
+      ? adultosMayoresResult.rows.map(row => row.id)
       : [];
-    
+
     // Consulta para estadísticas
     const query = `
       SELECT 
@@ -1293,7 +1302,7 @@ export const obtenerEstadisticasEventos = async (usuarioId, fechaInicio = null, 
         OR (e.fecha_inicio <= $4 AND (e.fecha_fin IS NULL OR e.fecha_fin >= $5))
       )
     `;
-    
+
     const result = await client.query(query, [
       usuarioId,
       adultos_mayores_ids,
@@ -1301,9 +1310,9 @@ export const obtenerEstadisticasEventos = async (usuarioId, fechaInicio = null, 
       inicioMes,
       finMes
     ]);
-    
+
     const estadisticas = result.rows[0];
-    
+
     // Calcular porcentajes
     if (estadisticas.total_eventos > 0) {
       estadisticas.porcentaje_citas_medicas = Math.round((estadisticas.citas_medicas / estadisticas.total_eventos) * 100);
@@ -1320,9 +1329,9 @@ export const obtenerEstadisticasEventos = async (usuarioId, fechaInicio = null, 
       estadisticas.porcentaje_terapias = 0;
       estadisticas.porcentaje_con_recordatorio = 0;
     }
-    
+
     console.log('✅ Estadísticas obtenidas:', estadisticas.total_eventos, 'eventos');
-    
+
     return {
       exito: true,
       estadisticas: {
@@ -1333,11 +1342,11 @@ export const obtenerEstadisticasEventos = async (usuarioId, fechaInicio = null, 
         }
       }
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerEstadisticasEventos:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener estadísticas',
       codigo: 'ERROR_SERVIDOR',
       estadisticas: {}
@@ -1354,10 +1363,10 @@ export const obtenerEstadisticasEventos = async (usuarioId, fechaInicio = null, 
  */
 export const buscarEventos = async (usuarioId, busqueda) => {
   let client;
-  
+
   try {
     console.log('🔍 [CALENDARIO] Buscando eventos:', busqueda);
-    
+
     if (!busqueda || busqueda.trim().length < 2) {
       return {
         exito: true,
@@ -1366,11 +1375,11 @@ export const buscarEventos = async (usuarioId, busqueda) => {
         mensaje: 'Término de búsqueda muy corto'
       };
     }
-    
+
     const termino = `%${busqueda.trim()}%`;
-    
+
     client = await pool.connect();
-    
+
     // Obtener todos los adultos mayores asociados al usuario
     const adultosMayoresQuery = `
       SELECT am.id 
@@ -1378,13 +1387,13 @@ export const buscarEventos = async (usuarioId, busqueda) => {
       INNER JOIN familiares f ON am.id = f.adulto_mayor_id
       WHERE f.usuario_id = $1
     `;
-    
+
     const adultosMayoresResult = await client.query(adultosMayoresQuery, [usuarioId]);
-    
-    const adultos_mayores_ids = adultosMayoresResult.rows.length > 0 
-      ? adultosMayoresResult.rows.map(row => row.id) 
+
+    const adultos_mayores_ids = adultosMayoresResult.rows.length > 0
+      ? adultosMayoresResult.rows.map(row => row.id)
       : [];
-    
+
     // Buscar en eventos
     const query = `
       SELECT 
@@ -1403,12 +1412,13 @@ export const buscarEventos = async (usuarioId, busqueda) => {
         e.ubicacion,
         e.recurrente,
         e.familiar_id,
-        f.nombre as familiar_nombre,
+        u.nombre as familiar_nombre,
         am.nombre as adulto_mayor_nombre,
         e.usuario_id,
         e.creado_en
       FROM eventos e
       LEFT JOIN familiares f ON e.familiar_id = f.id
+      LEFT JOIN usuarios u ON f.usuario_id = u.id   
       LEFT JOIN adultos_mayores am ON e.adulto_mayor_id = am.id
       WHERE (
         e.usuario_id = $1
@@ -1432,26 +1442,26 @@ export const buscarEventos = async (usuarioId, busqueda) => {
         e.fecha_inicio DESC
       LIMIT 50
     `;
-    
+
     const result = await client.query(query, [
       usuarioId,
       adultos_mayores_ids,
       termino
     ]);
-    
+
     console.log(`✅ Encontrados ${result.rows.length} eventos para "${busqueda}"`);
-    
+
     return {
       exito: true,
       eventos: result.rows,
       busqueda,
       total: result.rows.length
     };
-    
+
   } catch (error) {
     console.error('❌ Error en buscarEventos:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al buscar eventos',
       codigo: 'ERROR_SERVIDOR',
       eventos: []
@@ -1469,7 +1479,7 @@ export const buscarEventos = async (usuarioId, busqueda) => {
 export const obtenerTiposEventosPredefinidos = async () => {
   try {
     console.log('📦 [CALENDARIO] Obteniendo tipos de eventos predefinidos');
-    
+
     // Tipos de eventos predefinidos con iconos y colores
     const tiposEventosPredefinidos = [
       {
@@ -1536,16 +1546,16 @@ export const obtenerTiposEventosPredefinidos = async () => {
         descripcion: 'Otro tipo de evento'
       }
     ];
-    
+
     return {
       exito: true,
       tipos_eventos: tiposEventosPredefinidos
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerTiposEventosPredefinidos:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener tipos de eventos',
       codigo: 'ERROR_SERVIDOR',
       tipos_eventos: []
@@ -1558,12 +1568,12 @@ export const obtenerTiposEventosPredefinidos = async () => {
  */
 export const obtenerCumpleanosFamiliares = async (usuarioId) => {
   let client;
-  
+
   try {
     console.log('🎂 [CALENDARIO] Obteniendo cumpleaños de familiares');
-    
+
     client = await pool.connect();
-    
+
     // Obtener cumpleaños de familiares del usuario
     const query = `
       SELECT 
@@ -1581,9 +1591,9 @@ export const obtenerCumpleanosFamiliares = async (usuarioId) => {
         EXTRACT(MONTH FROM f.fecha_nacimiento),
         EXTRACT(DAY FROM f.fecha_nacimiento)
     `;
-    
+
     const result = await client.query(query, [usuarioId]);
-    
+
     // Procesar fechas de cumpleaños
     const hoy = new Date();
     const cumpleanos = result.rows.map(familiar => {
@@ -1593,14 +1603,14 @@ export const obtenerCumpleanosFamiliares = async (usuarioId) => {
         fechaNac.getMonth(),
         fechaNac.getDate()
       );
-      
+
       // Si ya pasó este año, calcular para el próximo año
       if (proximoCumpleanos < hoy) {
         proximoCumpleanos.setFullYear(hoy.getFullYear() + 1);
       }
-      
+
       const diasRestantes = Math.ceil((proximoCumpleanos - hoy) / (1000 * 60 * 60 * 24));
-      
+
       return {
         ...familiar,
         proximo_cumpleanos: proximoCumpleanos.toISOString().split('T')[0],
@@ -1608,22 +1618,22 @@ export const obtenerCumpleanosFamiliares = async (usuarioId) => {
         edad_proxima: proximoCumpleanos.getFullYear() - fechaNac.getFullYear()
       };
     });
-    
+
     // Ordenar por días restantes
     cumpleanos.sort((a, b) => a.dias_restantes - b.dias_restantes);
-    
+
     console.log(`✅ Encontrados ${cumpleanos.length} cumpleaños`);
-    
+
     return {
       exito: true,
       cumpleanos,
       total: cumpleanos.length
     };
-    
+
   } catch (error) {
     console.error('❌ Error en obtenerCumpleanosFamiliares:', error.message);
-    return { 
-      exito: false, 
+    return {
+      exito: false,
       error: 'Error del servidor al obtener cumpleaños',
       codigo: 'ERROR_SERVIDOR',
       cumpleanos: []
@@ -1641,13 +1651,13 @@ export default {
   // Configuración
   obtenerConfiguracionCalendario,
   guardarConfiguracionCalendario,
-  
+
   // Eventos CRUD
   obtenerEventos,
   crearEvento,
   actualizarEvento,
   eliminarEvento,
-  
+
   // Consultas de eventos
   obtenerEventosPorRango,
   obtenerEventosPorFecha,
@@ -1655,10 +1665,10 @@ export default {
   obtenerEventosProximos,
   obtenerEventosPorTipo,
   buscarEventos,
-  
+
   // Estadísticas y reportes
   obtenerEstadisticasEventos,
-  
+
   // Utilidades y datos adicionales
   obtenerTiposEventosPredefinidos,
   obtenerCumpleanosFamiliares

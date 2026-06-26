@@ -166,7 +166,7 @@ export const obtenerMedicinasHoy = async (usuarioId) => {
           m.frecuencia = 'diaria'
           OR
           -- Medicinas semanales (verificar día de la semana)
-          (m.frecuencia = 'semanal' AND m.dias_semana @> ARRAY[$3]::int[])
+          (m.frecuencia = 'semanal' AND m.dias_semana @> ARRAY[$3]::jsonb)
           OR
           -- Medicinas con fecha específica
           (m.frecuencia = 'fecha_especifica' AND $1 BETWEEN m.fecha_inicio AND m.fecha_fin)
