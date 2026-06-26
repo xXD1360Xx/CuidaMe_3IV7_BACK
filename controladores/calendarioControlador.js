@@ -527,7 +527,7 @@ export const obtenerEventosProximos = async (usuarioId, limite = 10) => {
 
     client = await pool.connect();
 
-    // Obtener todos los adultos mayores asociados al usuario
+    // Obtener adultos mayores asociados
     const adultosMayoresQuery = `
       SELECT am.id 
       FROM adultos_mayores am
@@ -536,12 +536,11 @@ export const obtenerEventosProximos = async (usuarioId, limite = 10) => {
     `;
 
     const adultosMayoresResult = await client.query(adultosMayoresQuery, [usuarioId]);
+    const adultos_mayores_ids = adultosMayoresResult.rows.map(row => row.id);
 
-    const eventos = [];
+    let eventos = [];
 
-    if (adultosMayoresResult.rows.length > 0) {
-      const adultos_mayores_ids = adultosMayoresResult.rows.map(row => row.id);
-
+    if (adultos_mayores_ids.length > 0) {
       const query = `
         SELECT 
           e.id,
@@ -559,13 +558,12 @@ export const obtenerEventosProximos = async (usuarioId, limite = 10) => {
           e.ubicacion,
           e.recurrente,
           e.familiar_id,
-          u.nombre as familiar_nombre,  -- ✅ Corregido: de f.nombre a u.nombre
+          u.nombre as familiar_nombre,
           am.nombre as adulto_mayor_nombre,
           e.usuario_id,
           e.creado_en
         FROM eventos e
         LEFT JOIN familiares f ON e.familiar_id = f.id
-        LEFT JOIN usuarios u ON f.usuario_id = u.id   
         LEFT JOIN usuarios u ON f.usuario_id = u.id
         LEFT JOIN adultos_mayores am ON e.adulto_mayor_id = am.id
         WHERE (
@@ -583,17 +581,11 @@ export const obtenerEventosProximos = async (usuarioId, limite = 10) => {
         LIMIT $4
       `;
 
-      const result = await client.query(query, [
-        hoy,
-        usuarioId,
-        adultos_mayores_ids,
-        limite
-      ]);
-
-      eventos.push(...result.rows);
+      const result = await client.query(query, [hoy, usuarioId, adultos_mayores_ids, limite]);
+      eventos = result.rows;
     }
 
-    // También obtener eventos del usuario
+    // También obtener eventos del usuario directamente
     const eventosUsuarioQuery = `
       SELECT 
         e.id,
@@ -617,7 +609,6 @@ export const obtenerEventosProximos = async (usuarioId, limite = 10) => {
         e.creado_en
       FROM eventos e
       LEFT JOIN familiares f ON e.familiar_id = f.id
-      LEFT JOIN usuarios u ON f.usuario_id = u.id   
       LEFT JOIN usuarios u ON f.usuario_id = u.id
       WHERE e.usuario_id = $1
         AND (e.fecha_inicio >= $2 OR e.fecha_fin >= $2)
@@ -625,15 +616,10 @@ export const obtenerEventosProximos = async (usuarioId, limite = 10) => {
       LIMIT $3
     `;
 
-    const eventosUsuarioResult = await client.query(eventosUsuarioQuery, [
-      usuarioId,
-      hoy,
-      limite
-    ]);
+    const eventosUsuarioResult = await client.query(eventosUsuarioQuery, [usuarioId, hoy, limite]);
 
     // Combinar y eliminar duplicados
     const eventosMap = new Map();
-
     [...eventos, ...eventosUsuarioResult.rows].forEach(evento => {
       if (!eventosMap.has(evento.id)) {
         eventosMap.set(evento.id, evento);
@@ -641,14 +627,8 @@ export const obtenerEventosProximos = async (usuarioId, limite = 10) => {
     });
 
     const eventosUnicos = Array.from(eventosMap.values())
-      .sort((a, b) => {
-        const fechaA = new Date(`${a.fecha_inicio}T${a.hora_inicio || '00:00'}`);
-        const fechaB = new Date(`${b.fecha_inicio}T${b.hora_inicio || '00:00'}`);
-        return fechaA - fechaB;
-      })
+      .sort((a, b) => new Date(a.fecha_inicio) - new Date(b.fecha_inicio))
       .slice(0, limite);
-
-    console.log(`✅ Encontrados ${eventosUnicos.length} eventos próximos`);
 
     return {
       exito: true,
@@ -659,16 +639,9 @@ export const obtenerEventosProximos = async (usuarioId, limite = 10) => {
 
   } catch (error) {
     console.error('❌ Error en obtenerEventosProximos:', error.message);
-    return {
-      exito: false,
-      error: 'Error del servidor al obtener eventos próximos',
-      codigo: 'ERROR_SERVIDOR',
-      eventos: []
-    };
+    return { exito: false, error: 'Error al obtener eventos', codigo: 'ERROR_SERVIDOR', eventos: [] };
   } finally {
-    if (client) {
-      client.release();
-    }
+    if (client) client.release();
   }
 };
 

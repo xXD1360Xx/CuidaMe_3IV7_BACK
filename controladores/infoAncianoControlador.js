@@ -1060,12 +1060,12 @@ const obtenerMedicinas = async (adultoId) => {
         dosis,
         frecuencia,
         proposito,
-        hora_toma,
+        horarios,
         activa
       FROM medicinas
       WHERE adulto_mayor_id = $1
         AND activa = true
-      ORDER BY hora_toma
+      ORDER BY horarios
       LIMIT 5
     `;
 
