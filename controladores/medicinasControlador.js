@@ -113,11 +113,10 @@ export const obtenerMedicinasHoy = async (usuarioId) => {
     console.log('📅 [MEDICINAS] Obteniendo medicinas para hoy para usuario ID:', usuarioId);
 
     const hoy = new Date().toISOString().split('T')[0];
-    const diaSemana = new Date().getDay(); // 0 = Domingo, 1 = Lunes, etc.
+    const diaSemana = new Date().getDay();
 
     client = await pool.connect();
 
-    // Obtener el adulto mayor principal del usuario
     const adultoMayorQuery = `
       SELECT am.id 
       FROM adultos_mayores am
@@ -130,17 +129,11 @@ export const obtenerMedicinasHoy = async (usuarioId) => {
     const adultoMayorResult = await client.query(adultoMayorQuery, [usuarioId]);
 
     if (adultoMayorResult.rows.length === 0) {
-      return {
-        exito: true,
-        medicinas: [],
-        hoy,
-        mensaje: 'No se encontró un adulto mayor asociado'
-      };
+      return { exito: true, medicinas: [], hoy, mensaje: 'No se encontró un adulto mayor asociado' };
     }
 
     const adulto_mayor_id = adultoMayorResult.rows[0].id;
 
-    // Obtener medicinas que se deben tomar hoy
     const query = `
       SELECT 
         m.id,
@@ -150,7 +143,6 @@ export const obtenerMedicinasHoy = async (usuarioId) => {
         m.horarios,
         m.instrucciones,
         m.creado_en,
-        -- Verificar registros de hoy por horario
         ARRAY(
           SELECT rm.horario 
           FROM registros_medicina rm 
@@ -162,22 +154,16 @@ export const obtenerMedicinasHoy = async (usuarioId) => {
       WHERE m.adulto_mayor_id = $2
         AND m.activa = true
         AND (
-          -- Medicinas diarias
           m.frecuencia = 'diaria'
-          OR
-          -- Medicinas semanales (verificar día de la semana)
-          (m.frecuencia = 'semanal' AND m.dias_semana @> jsonb_build_array($3))
-
-          OR
-          -- Medicinas con fecha específica
-          (m.frecuencia = 'fecha_especifica' AND $1 BETWEEN m.fecha_inicio AND m.fecha_fin)
+          OR (m.frecuencia = 'semanal' AND m.dias_semana @> jsonb_build_array($3))
+          OR (m.frecuencia = 'fecha_especifica' AND $1 BETWEEN m.fecha_inicio AND m.fecha_fin)
         )
       ORDER BY 
         CASE 
-          WHEN ARRAY_POSITION(m.horarios, 'manana') IS NOT NULL THEN 1
-          WHEN ARRAY_POSITION(m.horarios, 'mediodia') IS NOT NULL THEN 2
-          WHEN ARRAY_POSITION(m.horarios, 'tarde') IS NOT NULL THEN 3
-          WHEN ARRAY_POSITION(m.horarios, 'noche') IS NOT NULL THEN 4
+          WHEN m.horarios ? 'manana' THEN 1
+          WHEN m.horarios ? 'mediodia' THEN 2
+          WHEN m.horarios ? 'tarde' THEN 3
+          WHEN m.horarios ? 'noche' THEN 4
           ELSE 5
         END,
         m.nombre
@@ -191,28 +177,13 @@ export const obtenerMedicinasHoy = async (usuarioId) => {
       horarios_tomados_hoy: med.horarios_tomados_hoy || []
     }));
 
-    console.log(`✅ Encontradas ${medicinas.length} medicinas para hoy`);
-
-    return {
-      exito: true,
-      medicinas,
-      hoy,
-      dia_semana: diaSemana,
-      adulto_mayor_id
-    };
+    return { exito: true, medicinas, hoy, dia_semana: diaSemana, adulto_mayor_id };
 
   } catch (error) {
     console.error('❌ Error en obtenerMedicinasHoy:', error.message);
-    return {
-      exito: false,
-      error: 'Error del servidor al obtener medicinas para hoy',
-      codigo: 'ERROR_SERVIDOR',
-      medicinas: []
-    };
+    return { exito: false, error: 'Error del servidor', codigo: 'ERROR_SERVIDOR', medicinas: [] };
   } finally {
-    if (client) {
-      client.release();
-    }
+    if (client) client.release();
   }
 };
 
