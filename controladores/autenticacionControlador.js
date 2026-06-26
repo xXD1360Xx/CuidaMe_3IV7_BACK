@@ -1124,7 +1124,7 @@ export const solicitarRecuperacionContrasena = async (email) => {
     const usuario = usuarioResult.rows[0];
 
     // Generar código de 6 dígitos
-    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+    const codigo = Math.floor(1000 + Math.random() * 9000).toString();
 
     // Guardar código en base de datos (con expiración de 15 minutos)
     const expiracion = new Date();
