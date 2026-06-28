@@ -155,7 +155,7 @@ export const obtenerMedicinasHoy = async (usuarioId) => {
         AND m.activa = true
         AND (
           m.frecuencia = 'diaria'
-          OR (m.frecuencia = 'semanal' AND m.dias_semana @> jsonb_build_array($3))
+          OR (m.frecuencia = 'semanal' AND m.dias_semana @> jsonb_build_array($3::int))
           OR (m.frecuencia = 'fecha_especifica' AND $1 BETWEEN m.fecha_inicio AND m.fecha_fin)
         )
       ORDER BY 
