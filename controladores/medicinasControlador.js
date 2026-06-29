@@ -149,7 +149,7 @@ export const obtenerMedicinasHoy = async (usuarioId) => {
           WHERE rm.medicina_id = m.id 
             AND rm.fecha_toma = $1
             AND rm.completada = true
-        ) as horarios_tomados_hoy
+        ) as tomada_hoy   
       FROM medicinas m
       WHERE m.adulto_mayor_id = $2
         AND m.activa = true
@@ -174,7 +174,7 @@ export const obtenerMedicinasHoy = async (usuarioId) => {
     const medicinas = result.rows.map(med => ({
       ...med,
       horarios: med.horarios || [],
-      horarios_tomados_hoy: med.horarios_tomados_hoy || []
+      tomada_hoy: med.tomada_hoy || []   // ✅ CORRECTO: usa el alias que definiste
     }));
 
     return { exito: true, medicinas, hoy, dia_semana: diaSemana, adulto_mayor_id };
