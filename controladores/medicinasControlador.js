@@ -149,7 +149,7 @@ export const obtenerMedicinasHoy = async (usuarioId) => {
           WHERE rm.medicina_id = m.id 
             AND rm.fecha_toma = $1
             AND rm.completada = true
-        ) as tomada_hoy   
+        ) as tomada_hoy
       FROM medicinas m
       WHERE m.adulto_mayor_id = $2
         AND m.activa = true
@@ -174,7 +174,7 @@ export const obtenerMedicinasHoy = async (usuarioId) => {
     const medicinas = result.rows.map(med => ({
       ...med,
       horarios: med.horarios || [],
-      tomada_hoy: med.tomada_hoy || []   // ✅ CORRECTO: usa el alias que definiste
+      tomada_hoy: med.tomada_hoy || []
     }));
 
     return { exito: true, medicinas, hoy, dia_semana: diaSemana, adulto_mayor_id };
@@ -274,8 +274,6 @@ export const obtenerMedicinasFrecuentes = async (usuarioId, limite = 5) => {
 /**
  * 4. Crear nueva medicina
  */
-
-
 export const crearMedicina = async (usuarioId, medicina) => {
   console.log('📦 Datos recibidos - usuarioId:', usuarioId, 'medicina:', JSON.stringify(medicina));
 
@@ -379,15 +377,15 @@ export const crearMedicina = async (usuarioId, medicina) => {
       medicina.nombre.trim(),
       medicina.dosis.trim(),
       medicina.frecuencia || 'diaria',
-      SON.stringify(medicina.horarios),   // ✅ CONVERTIDO A JSON STRING
+      JSON.stringify(medicina.horarios),   // ✅ CORREGIDO
       medicina.duracion_dias || null,
       medicina.proposito || '',
       medicina.instrucciones || '',
-      medicina.stock_actual || 30,
-      medicina.stock_minimo || 10,
+      medicina.stock || 30,               // ✅ Usa 'stock' (lo envía el frontend)
+      medicina.stock_minimo || 10,        // ✅ Usa 'stock_minimo'
       medicina.fecha_inicio || new Date().toISOString().split('T')[0],
       medicina.fecha_fin || null,
-      medicina.dias_semana || (medicina.frecuencia === 'semanal' ? [1, 2, 3, 4, 5, 6, 0] : null),
+      JSON.stringify(medicina.dias_semana || (medicina.frecuencia === 'semanal' ? [1, 2, 3, 4, 5, 6, 0] : null)), // ✅ serializado
       usuarioId
     ];
 
@@ -472,22 +470,34 @@ export const actualizarMedicina = async (medicinaId, usuarioId, medicina) => {
       };
     }
 
-    // Construir query dinámica
+    // Construir query dinámica con mapeo de campos
     const updates = [];
     const values = [];
     let paramIndex = 1;
 
-    const camposPermitidos = [
-      'nombre', 'dosis', 'frecuencia', 'horarios', 'duracion_dias',
-      'proposito', 'instrucciones', 'stock_actual', 'stock_minimo',
-      'fecha_inicio', 'fecha_fin', 'dias_semana', 'activa'
-    ];
-    for (const campo of camposPermitidos) {
-      if (medicina[campo] !== undefined) {
-        updates.push(`${campo} = $${paramIndex}`);
-        let valor = medicina[campo];
-        // Los campos JSONB deben serializarse
-        if (campo === 'horarios' || campo === 'dias_semana') {
+    // Mapeo de campos del frontend a campos de la BD
+    const campoMap = {
+      'nombre': 'nombre',
+      'dosis': 'dosis',
+      'frecuencia': 'frecuencia',
+      'horarios': 'horarios',
+      'duracion_dias': 'duracion_dias',
+      'proposito': 'proposito',
+      'instrucciones': 'instrucciones',
+      'stock': 'stock_actual',        // ✅ Mapeo de 'stock' a 'stock_actual'
+      'stock_minimo': 'stock_minimo',
+      'fecha_inicio': 'fecha_inicio',
+      'fecha_fin': 'fecha_fin',
+      'dias_semana': 'dias_semana',
+      'activa': 'activa'
+    };
+
+    for (const [campoFront, campoDb] of Object.entries(campoMap)) {
+      if (medicina[campoFront] !== undefined) {
+        updates.push(`${campoDb} = $${paramIndex}`);
+        let valor = medicina[campoFront];
+        // Serializar campos JSONB
+        if (campoFront === 'horarios' || campoFront === 'dias_semana') {
           valor = JSON.stringify(valor);
         }
         values.push(valor);
