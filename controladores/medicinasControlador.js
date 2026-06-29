@@ -379,7 +379,7 @@ export const crearMedicina = async (usuarioId, medicina) => {
       medicina.nombre.trim(),
       medicina.dosis.trim(),
       medicina.frecuencia || 'diaria',
-      medicina.horarios,
+      SON.stringify(medicina.horarios),   // ✅ CONVERTIDO A JSON STRING
       medicina.duracion_dias || null,
       medicina.proposito || '',
       medicina.instrucciones || '',
@@ -482,11 +482,15 @@ export const actualizarMedicina = async (medicinaId, usuarioId, medicina) => {
       'proposito', 'instrucciones', 'stock_actual', 'stock_minimo',
       'fecha_inicio', 'fecha_fin', 'dias_semana', 'activa'
     ];
-
     for (const campo of camposPermitidos) {
       if (medicina[campo] !== undefined) {
         updates.push(`${campo} = $${paramIndex}`);
-        values.push(medicina[campo]);
+        let valor = medicina[campo];
+        // Los campos JSONB deben serializarse
+        if (campo === 'horarios' || campo === 'dias_semana') {
+          valor = JSON.stringify(valor);
+        }
+        values.push(valor);
         paramIndex++;
       }
     }
