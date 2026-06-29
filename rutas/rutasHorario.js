@@ -1,141 +1,211 @@
-/**
- * rutas/horarioRutas.js - Rutas para Gestión de Horarios
- */
+// rutas/horarioRutas.js - Rutas para Gestión de Horarios (actualizado)
 import express from 'express';
 import * as horarioControlador from '../controladores/horarioControlador.js';
-import { autenticarUsuario, verificarRol, verificarGrupo } from '../middleware/autenticacionMiddleware.js';
+import { autenticarUsuario } from '../middleware/autenticacionMiddleware.js';
 
 const router = express.Router();
 
-// ==================== RUTAS DE CONFIGURACIÓN ====================
+// ============================================================
+//  CONFIGURACIÓN
+// ============================================================
 
-/**
- * 1. Obtener configuración del horario
- * POST /api/horario/configuracion
- */
 router.post('/configuracion', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-
-    if (!usuario_id) {
-      return res.status(400).json({
-        exito: false,
-        error: 'ID de usuario es requerido',
-        codigo: 'USUARIO_ID_REQUERIDO'
-      });
-    }
-
+    if (!usuario_id) return res.status(400).json({ exito: false, error: 'ID de usuario requerido' });
     const resultado = await horarioControlador.obtenerConfiguracionHorario(usuario_id);
-
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'ADULTO_NO_ENCONTRADO' ? 404 : 500;
       return res.status(statusCode).json(resultado);
     }
-
-    res.status(200).json({
-      exito: true,
-      configuracion: resultado.configuracion,
-      mensaje: resultado.configuracion.adulto_mayor_id
-        ? 'Configuración obtenida correctamente'
-        : 'Configuración por defecto generada'
-    });
-
+    res.status(200).json({ exito: true, configuracion: resultado.configuracion });
   } catch (error) {
-    console.error('❌ Error en ruta /configuracion:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en /configuracion:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 
-/**
- * 2. Guardar configuración del horario
- * POST /api/horario/guardar-configuracion
- */
 router.post('/guardar-configuracion', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, configuracion } = req.body;
-
-    if (!usuario_id || !configuracion) {
-      return res.status(400).json({
-        exito: false,
-        error: 'ID de usuario y configuración son requeridos',
-        codigo: 'DATOS_INCOMPLETOS'
-      });
-    }
-
+    if (!usuario_id || !configuracion) return res.status(400).json({ exito: false, error: 'Datos incompletos' });
     const resultado = await horarioControlador.guardarConfiguracionHorario(usuario_id, configuracion);
-
     if (!resultado.exito) {
-      const statusCode = resultado.codigo === 'DATOS_INCOMPLETOS' ? 400 :
-        resultado.codigo === 'ADULTO_NO_ENCONTRADO' ? 404 : 500;
+      const statusCode = resultado.codigo === 'DATOS_INCOMPLETOS' ? 400 : resultado.codigo === 'ADULTO_NO_ENCONTRADO' ? 404 : 500;
       return res.status(statusCode).json(resultado);
     }
-
     res.status(200).json(resultado);
-
   } catch (error) {
-    console.error('❌ Error en ruta /guardar-configuracion:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en /guardar-configuracion:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 
-// ==================== RUTAS DE ACTIVIDADES FIJAS ====================
+// ============================================================
+//  ACTIVIDADES BASE (nombre, tipo, color, descripción)
+// ============================================================
 
 /**
- * 3. Obtener actividades fijas
- * POST /api/horario/actividades-fijas
+ * Obtener todas las actividades base (agrupadas por nombre/tipo/color/desc)
  */
+router.post('/actividades-base', autenticarUsuario, async (req, res) => {
+  try {
+    const { usuario_id } = req.body;
+    if (!usuario_id) return res.status(400).json({ exito: false, error: 'ID de usuario requerido' });
+    const resultado = await horarioControlador.obtenerActividadesBase(usuario_id);
+    res.status(200).json(resultado);
+  } catch (error) {
+    console.error('❌ Error en /actividades-base:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
+  }
+});
+
+/**
+ * Crear una nueva actividad base
+ */
+router.post('/actividades-base/crear', autenticarUsuario, async (req, res) => {
+  try {
+    const { usuario_id, ...datos } = req.body;
+    if (!usuario_id) return res.status(400).json({ exito: false, error: 'ID de usuario requerido' });
+    const resultado = await horarioControlador.crearActividadBase(usuario_id, datos);
+    if (!resultado.exito) {
+      return res.status(400).json(resultado);
+    }
+    res.status(201).json(resultado);
+  } catch (error) {
+    console.error('❌ Error en /actividades-base/crear:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
+  }
+});
+
+/**
+ * Actualizar una actividad base (por ID)
+ */
+router.put('/actividades-base/:id', autenticarUsuario, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const datos = req.body;
+    const resultado = await horarioControlador.actualizarActividadBase(id, datos);
+    if (!resultado.exito) {
+      return res.status(400).json(resultado);
+    }
+    res.status(200).json(resultado);
+  } catch (error) {
+    console.error('❌ Error en /actividades-base/:id:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
+  }
+});
+
+/**
+ * Eliminar una actividad base (y todas sus ocurrencias)
+ */
+router.delete('/actividades-base/:id', autenticarUsuario, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const resultado = await horarioControlador.eliminarActividadBase(id);
+    if (!resultado.exito) {
+      return res.status(400).json(resultado);
+    }
+    res.status(200).json(resultado);
+  } catch (error) {
+    console.error('❌ Error en /actividades-base/:id:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
+  }
+});
+
+// ============================================================
+//  OCURRENCIAS (horarios con días, hora inicio/fin, duración)
+// ============================================================
+
+/**
+ * Obtener ocurrencias en un rango de fechas
+ */
+router.post('/ocurrencias/rango', autenticarUsuario, async (req, res) => {
+  try {
+    const { usuario_id, fecha_inicio, fecha_fin } = req.body;
+    if (!usuario_id) return res.status(400).json({ exito: false, error: 'ID de usuario requerido' });
+    const resultado = await horarioControlador.obtenerOcurrenciasPorRango(usuario_id, fecha_inicio, fecha_fin);
+    res.status(200).json(resultado);
+  } catch (error) {
+    console.error('❌ Error en /ocurrencias/rango:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
+  }
+});
+
+/**
+ * Crear una nueva ocurrencia
+ */
+router.post('/ocurrencias/crear', autenticarUsuario, async (req, res) => {
+  try {
+    const { usuario_id, ...datos } = req.body;
+    if (!usuario_id) return res.status(400).json({ exito: false, error: 'ID de usuario requerido' });
+    const resultado = await horarioControlador.crearOcurrencia(usuario_id, datos);
+    if (!resultado.exito) {
+      return res.status(400).json(resultado);
+    }
+    res.status(201).json(resultado);
+  } catch (error) {
+    console.error('❌ Error en /ocurrencias/crear:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
+  }
+});
+
+/**
+ * Actualizar una ocurrencia existente
+ */
+router.put('/ocurrencias/:id', autenticarUsuario, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const datos = req.body;
+    const resultado = await horarioControlador.actualizarOcurrencia(id, datos);
+    if (!resultado.exito) {
+      return res.status(400).json(resultado);
+    }
+    res.status(200).json(resultado);
+  } catch (error) {
+    console.error('❌ Error en /ocurrencias/:id:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
+  }
+});
+
+/**
+ * Eliminar una ocurrencia
+ */
+router.delete('/ocurrencias/:id', autenticarUsuario, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const resultado = await horarioControlador.eliminarOcurrencia(id);
+    if (!resultado.exito) {
+      return res.status(400).json(resultado);
+    }
+    res.status(200).json(resultado);
+  } catch (error) {
+    console.error('❌ Error en /ocurrencias/:id:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
+  }
+});
+
+// ============================================================
+//  RUTAS EXISTENTES (sin cambios, pero usando autenticación por token)
+// ============================================================
+
 router.post('/actividades-fijas', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-
-    if (!usuario_id) {
-      return res.status(400).json({
-        exito: false,
-        error: 'ID de usuario es requerido',
-        codigo: 'USUARIO_ID_REQUERIDO'
-      });
-    }
-
+    if (!usuario_id) return res.status(400).json({ exito: false, error: 'ID de usuario requerido' });
     const resultado = await horarioControlador.obtenerActividadesFijas(usuario_id);
-
     res.status(200).json(resultado);
-
   } catch (error) {
-    console.error('❌ Error en ruta /actividades-fijas:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en /actividades-fijas:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 
-/**
- * 4. Crear actividad
- * POST /api/horario/crear-actividad
- */
 router.post('/crear-actividad', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, actividad } = req.body;
-
-    if (!usuario_id || !actividad) {
-      return res.status(400).json({
-        exito: false,
-        error: 'ID de usuario y actividad son requeridos',
-        codigo: 'DATOS_INCOMPLETOS'
-      });
-    }
-
+    if (!usuario_id || !actividad) return res.status(400).json({ exito: false, error: 'Datos incompletos' });
     const resultado = await horarioControlador.crearActividad(usuario_id, actividad);
-
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'DATOS_INCOMPLETOS' ? 400 :
         resultado.codigo === 'DIAS_INVALIDOS' ? 400 :
@@ -145,402 +215,178 @@ router.post('/crear-actividad', autenticarUsuario, async (req, res) => {
                 resultado.codigo === 'ACTIVIDAD_DUPLICADA' ? 409 : 500;
       return res.status(statusCode).json(resultado);
     }
-
     res.status(201).json(resultado);
-
   } catch (error) {
-    console.error('❌ Error en ruta /crear-actividad:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en /crear-actividad:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 
-/**
- * 5. Actualizar actividad
- * PUT /api/horario/actualizar-actividad/:id
- */
 router.put('/actualizar-actividad/:id', autenticarUsuario, async (req, res) => {
   try {
     const { id } = req.params;
     const { usuario_id, actividad } = req.body;
-
-    if (!id || !usuario_id || !actividad) {
-      return res.status(400).json({
-        exito: false,
-        error: 'ID de actividad, usuario y datos de actualización son requeridos',
-        codigo: 'DATOS_INCOMPLETOS'
-      });
-    }
-
+    if (!id || !usuario_id || !actividad) return res.status(400).json({ exito: false, error: 'Datos incompletos' });
     const resultado = await horarioControlador.actualizarActividad(id, usuario_id, actividad);
-
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'ACTIVIDAD_NO_ENCONTRADA' ? 404 :
         resultado.codigo === 'SIN_PERMISOS' ? 403 :
           resultado.codigo === 'SIN_CAMPOS' ? 400 : 500;
       return res.status(statusCode).json(resultado);
     }
-
     res.status(200).json(resultado);
-
   } catch (error) {
-    console.error('❌ Error en ruta /actualizar-actividad:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en /actualizar-actividad/:id:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 
-/**
- * 6. Eliminar actividad
- * DELETE /api/horario/eliminar-actividad/:id
- */
 router.delete('/eliminar-actividad/:id', autenticarUsuario, async (req, res) => {
   try {
     const { id } = req.params;
     const { usuario_id } = req.body;
-
-    if (!id || !usuario_id) {
-      return res.status(400).json({
-        exito: false,
-        error: 'ID de actividad y usuario son requeridos',
-        codigo: 'DATOS_INCOMPLETOS'
-      });
-    }
-
+    if (!id || !usuario_id) return res.status(400).json({ exito: false, error: 'Datos incompletos' });
     const resultado = await horarioControlador.eliminarActividad(id, usuario_id);
-
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'ACTIVIDAD_NO_ENCONTRADA' ? 404 :
         resultado.codigo === 'SIN_PERMISOS' ? 403 : 500;
       return res.status(statusCode).json(resultado);
     }
-
     res.status(200).json(resultado);
-
   } catch (error) {
-    console.error('❌ Error en ruta /eliminar-actividad:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en /eliminar-actividad/:id:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 
-// ==================== RUTAS DE CONSULTA DE ACTIVIDADES ====================
-
-/**
- * 7. Obtener actividades por fecha específica
- * POST /api/horario/actividades-fecha
- */
 router.post('/actividades-fecha', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, fecha } = req.body;
-
-    if (!usuario_id || !fecha) {
-      return res.status(400).json({
-        exito: false,
-        error: 'ID de usuario y fecha son requeridos',
-        codigo: 'DATOS_INCOMPLETOS'
-      });
-    }
-
+    if (!usuario_id || !fecha) return res.status(400).json({ exito: false, error: 'Datos incompletos' });
     const resultado = await horarioControlador.obtenerActividadesPorFecha(usuario_id, fecha);
-
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'FECHA_FORMATO_INVALIDO' ? 400 : 500;
       return res.status(statusCode).json(resultado);
     }
-
     res.status(200).json(resultado);
-
   } catch (error) {
-    console.error('❌ Error en ruta /actividades-fecha:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en /actividades-fecha:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 
-/**
- * 8. Obtener actividades de hoy
- * POST /api/horario/actividades-hoy
- */
 router.post('/actividades-hoy', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id } = req.body;
-
-    if (!usuario_id) {
-      return res.status(400).json({
-        exito: false,
-        error: 'ID de usuario es requerido',
-        codigo: 'USUARIO_ID_REQUERIDO'
-      });
-    }
-
+    if (!usuario_id) return res.status(400).json({ exito: false, error: 'ID de usuario requerido' });
     const resultado = await horarioControlador.obtenerActividadesHoy(usuario_id);
-
     res.status(200).json(resultado);
-
   } catch (error) {
-    console.error('❌ Error en ruta /actividades-hoy:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en /actividades-hoy:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 
-/**
- * 9. Obtener actividades por tipo
- * POST /api/horario/actividades-tipo
- */
 router.post('/actividades-tipo', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, tipo } = req.body;
-
-    if (!usuario_id || !tipo) {
-      return res.status(400).json({
-        exito: false,
-        error: 'ID de usuario y tipo de actividad son requeridos',
-        codigo: 'DATOS_INCOMPLETOS'
-      });
-    }
-
+    if (!usuario_id || !tipo) return res.status(400).json({ exito: false, error: 'Datos incompletos' });
     const resultado = await horarioControlador.obtenerActividadesPorTipo(usuario_id, tipo);
-
     res.status(200).json(resultado);
-
   } catch (error) {
-    console.error('❌ Error en ruta /actividades-tipo:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en /actividades-tipo:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 
-/**
- * 10. Obtener actividades de la semana
- * POST /api/horario/actividades-semana
- */
 router.post('/actividades-semana', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, fecha_inicio } = req.body;
-
-    if (!usuario_id) {
-      return res.status(400).json({
-        exito: false,
-        error: 'ID de usuario es requerido',
-        codigo: 'USUARIO_ID_REQUERIDO'
-      });
-    }
-
+    if (!usuario_id) return res.status(400).json({ exito: false, error: 'ID de usuario requerido' });
     const resultado = await horarioControlador.obtenerActividadesSemana(usuario_id, fecha_inicio);
-
     res.status(200).json(resultado);
-
   } catch (error) {
-    console.error('❌ Error en ruta /actividades-semana:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en /actividades-semana:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 
-// ==================== RUTAS DE REGISTRO Y SEGUIMIENTO ====================
-
-/**
- * 11. Registrar actividad realizada
- * POST /api/horario/registrar-actividad
- */
 router.post('/registrar-actividad', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, actividad_id, fecha, completada, observaciones } = req.body;
-
-    if (!usuario_id || !actividad_id) {
-      return res.status(400).json({
-        exito: false,
-        error: 'ID de usuario y actividad son requeridos',
-        codigo: 'DATOS_INCOMPLETOS'
-      });
-    }
-
-    const datos = {
+    if (!usuario_id || !actividad_id) return res.status(400).json({ exito: false, error: 'Datos incompletos' });
+    const resultado = await horarioControlador.registrarActividadRealizada(usuario_id, {
       actividad_id,
       fecha,
       completada,
       observaciones
-    };
-
-    const resultado = await horarioControlador.registrarActividadRealizada(usuario_id, datos);
-
+    });
     if (!resultado.exito) {
       const statusCode = resultado.codigo === 'DATOS_INCOMPLETOS' ? 400 :
         resultado.codigo === 'ACTIVIDAD_NO_ENCONTRADA' ? 404 :
           resultado.codigo === 'SIN_ACCESO' ? 403 : 500;
       return res.status(statusCode).json(resultado);
     }
-
     res.status(200).json(resultado);
-
   } catch (error) {
-    console.error('❌ Error en ruta /registrar-actividad:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en /registrar-actividad:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 
-// ==================== RUTAS DE RESÚMENES Y ESTADÍSTICAS ====================
-
-/**
- * 12. Obtener resumen diario
- * POST /api/horario/resumen-diario
- */
 router.post('/resumen-diario', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, fecha } = req.body;
-
-    if (!usuario_id) {
-      return res.status(400).json({
-        exito: false,
-        error: 'ID de usuario es requerido',
-        codigo: 'USUARIO_ID_REQUERIDO'
-      });
-    }
-
+    if (!usuario_id) return res.status(400).json({ exito: false, error: 'ID de usuario requerido' });
     const resultado = await horarioControlador.obtenerResumenDiario(usuario_id, fecha);
-
     res.status(200).json(resultado);
-
   } catch (error) {
-    console.error('❌ Error en ruta /resumen-diario:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en /resumen-diario:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 
-// ==================== RUTAS DE UTILIDADES ====================
-
-/**
- * 13. Buscar conflictos de horario
- * POST /api/horario/buscar-conflictos
- */
 router.post('/buscar-conflictos', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, dias, hora_inicio, hora_fin, actividad_id } = req.body;
-
-    if (!usuario_id || !dias || !hora_inicio || !hora_fin) {
-      return res.status(400).json({
-        exito: false,
-        error: 'Datos incompletos para buscar conflictos',
-        codigo: 'DATOS_INCOMPLETOS'
-      });
-    }
-
-    const datos = {
-      dias,
-      hora_inicio,
-      hora_fin,
-      actividad_id
-    };
-
-    const resultado = await horarioControlador.buscarConflictosHorario(usuario_id, datos);
-
+    if (!usuario_id || !dias || !hora_inicio || !hora_fin) return res.status(400).json({ exito: false, error: 'Datos incompletos' });
+    const resultado = await horarioControlador.buscarConflictosHorario(usuario_id, { dias, hora_inicio, hora_fin, actividad_id });
     res.status(200).json(resultado);
-
   } catch (error) {
-    console.error('❌ Error en ruta /buscar-conflictos:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en /buscar-conflictos:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 
-/**
- * 14. Obtener actividades predefinidas
- * GET /api/horario/actividades-predeifinidas
- */
 router.get('/actividades-predeifinidas', autenticarUsuario, async (req, res) => {
   try {
     const resultado = await horarioControlador.obtenerActividadesPredefinidas();
-
     res.status(200).json(resultado);
-
   } catch (error) {
-    console.error('❌ Error en ruta /actividades-predeifinidas:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en /actividades-predeifinidas:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 
-/**
- * 15. Obtener estadísticas del horario
- * POST /api/horario/estadisticas
- */
 router.post('/estadisticas', autenticarUsuario, async (req, res) => {
   try {
     const { usuario_id, fecha_inicio, fecha_fin } = req.body;
-
-    if (!usuario_id) {
-      return res.status(400).json({
-        exito: false,
-        error: 'ID de usuario es requerido',
-        codigo: 'USUARIO_ID_REQUERIDO'
-      });
-    }
-
-    // Obtener todas las actividades en el rango de fechas
+    if (!usuario_id) return res.status(400).json({ exito: false, error: 'ID de usuario requerido' });
     const actividadesResult = await horarioControlador.obtenerActividadesFijas(usuario_id);
-
-    if (!actividadesResult.exito) {
-      return res.status(500).json(actividadesResult);
-    }
-
-    // Obtener resumen de la semana actual
+    if (!actividadesResult.exito) return res.status(500).json(actividadesResult);
     const resumenSemanaResult = await horarioControlador.obtenerResumenDiario(usuario_id);
-
-    // Calcular estadísticas
-    const actividades = actividadesResult.actividades;
-
+    const actividades = actividadesResult.actividades || [];
     const estadisticas = {
       total_actividades: actividades.length,
-      por_tipo: actividades.reduce((acc, actividad) => {
-        if (!acc[actividad.tipo]) {
-          acc[actividad.tipo] = 0;
-        }
-        acc[actividad.tipo]++;
+      por_tipo: actividades.reduce((acc, act) => {
+        if (!acc[act.tipo]) acc[act.tipo] = 0;
+        acc[act.tipo]++;
         return acc;
       }, {}),
-      por_dia: actividades.reduce((acc, actividad) => {
-        if (actividad.dias && Array.isArray(actividad.dias)) {
-          actividad.dias.forEach(dia => {
-            if (!acc[dia]) {
-              acc[dia] = 0;
-            }
+      por_dia: actividades.reduce((acc, act) => {
+        if (act.dias && Array.isArray(act.dias)) {
+          act.dias.forEach(dia => {
+            if (!acc[dia]) acc[dia] = 0;
             acc[dia]++;
           });
         }
@@ -550,69 +396,27 @@ router.post('/estadisticas', autenticarUsuario, async (req, res) => {
       total_no_recurrentes: actividades.filter(a => !a.esRecurrente).length,
       resumen_hoy: resumenSemanaResult.exito ? resumenSemanaResult.resumen : null
     };
-
-    res.status(200).json({
-      exito: true,
-      estadisticas,
-      periodo: {
-        fecha_inicio: fecha_inicio || new Date().toISOString().split('T')[0],
-        fecha_fin: fecha_fin || new Date().toISOString().split('T')[0]
-      }
-    });
-
+    res.status(200).json({ exito: true, estadisticas });
   } catch (error) {
-    console.error('❌ Error en ruta /estadisticas:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en /estadisticas:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 
-// ==================== RUTAS DE EXPORTACIÓN ====================
-
-/**
- * 16. Exportar horario a PDF
- * POST /api/horario/exportar-pdf
- */
 router.post('/exportar-pdf', autenticarUsuario, async (req, res) => {
   try {
-    const { usuario_id, tipo_exportacion, fecha_inicio, fecha_fin } = req.body;
-
-    if (!usuario_id) {
-      return res.status(400).json({
-        exito: false,
-        error: 'ID de usuario es requerido',
-        codigo: 'USUARIO_ID_REQUERIDO'
-      });
-    }
-
-    // Obtener configuración
+    const { usuario_id } = req.body;
+    if (!usuario_id) return res.status(400).json({ exito: false, error: 'ID de usuario requerido' });
     const configResult = await horarioControlador.obtenerConfiguracionHorario(usuario_id);
-
-    if (!configResult.exito) {
-      return res.status(404).json(configResult);
-    }
-
-    // Obtener actividades
+    if (!configResult.exito) return res.status(404).json(configResult);
     const actividadesResult = await horarioControlador.obtenerActividadesFijas(usuario_id);
-
-    // Obtener resumen de la semana
     const resumenResult = await horarioControlador.obtenerResumenDiario(usuario_id);
-
-    // Preparar datos para exportación
     const datosExportacion = {
       configuracion: configResult.configuracion,
       actividades: actividadesResult.exito ? actividadesResult.actividades : [],
       resumen: resumenResult.exito ? resumenResult.resumen : {},
-      fecha_generacion: new Date().toISOString(),
-      tipo: tipo_exportacion || 'semanal'
+      fecha_generacion: new Date().toISOString()
     };
-
-    // En un sistema real, aquí generas el PDF
-    // Por ahora, devolvemos los datos para que el frontend los maneje
-
     res.status(200).json({
       exito: true,
       datos: datosExportacion,
@@ -620,70 +424,26 @@ router.post('/exportar-pdf', autenticarUsuario, async (req, res) => {
       nombre_archivo: `horario_${Date.now()}.pdf`,
       mensaje: 'Horario listo para exportar a PDF'
     });
-
   } catch (error) {
-    console.error('❌ Error en ruta /exportar-pdf:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en /exportar-pdf:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 
-/**
- * 17. Sincronizar horario
- * POST /api/horario/sincronizar
- */
 router.post('/sincronizar', autenticarUsuario, async (req, res) => {
   try {
-    const { usuario_id, datos_sincronizacion } = req.body;
-
-    if (!usuario_id) {
-      return res.status(400).json({
-        exito: false,
-        error: 'ID de usuario es requerido',
-        codigo: 'USUARIO_ID_REQUERIDO'
-      });
-    }
-
-    // Aquí implementarías la lógica de sincronización
-    // Por ahora, devolvemos un estado básico
-
-    console.log('🔄 Sincronizando horario para usuario:', usuario_id);
-
-    res.status(200).json({
-      exito: true,
-      sincronizado_en: new Date().toISOString(),
-      cambios_aplicados: 0,
-      mensaje: 'Sincronización completada (modo de demostración)'
-    });
-
+    const { usuario_id } = req.body;
+    if (!usuario_id) return res.status(400).json({ exito: false, error: 'ID de usuario requerido' });
+    // Lógica de sincronización (placeholder)
+    res.status(200).json({ exito: true, sincronizado_en: new Date().toISOString(), cambios_aplicados: 0 });
   } catch (error) {
-    console.error('❌ Error en ruta /sincronizar:', error.message);
-    res.status(500).json({
-      exito: false,
-      error: 'Error interno del servidor',
-      codigo: 'ERROR_INTERNO'
-    });
+    console.error('❌ Error en /sincronizar:', error);
+    res.status(500).json({ exito: false, error: 'Error interno' });
   }
 });
 
-// ==================== RUTAS DE PRUEBA ====================
-
-/**
- * 18. Ruta de prueba
- * GET /api/horario/status
- */
 router.get('/status', (req, res) => {
-  res.status(200).json({
-    exito: true,
-    mensaje: 'API de Horario funcionando correctamente',
-    version: '1.0.0',
-    fecha: new Date().toISOString()
-  });
+  res.status(200).json({ exito: true, mensaje: 'API de Horario funcionando correctamente' });
 });
-
-// ==================== EXPORTACIÓN ====================
 
 export default router;
