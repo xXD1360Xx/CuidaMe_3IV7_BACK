@@ -1643,8 +1643,13 @@ export const obtenerOcurrenciasPorRango = async (usuarioId, fechaInicio, fechaFi
         AND ah.activa = true
         AND ah.dias IS NOT NULL AND jsonb_array_length(ah.dias) > 0
         AND (
+          -- Recurrentes: se muestran siempre (porque aplican a todas las semanas)
           (ah.es_recurrente = true)
-          OR (ah.fecha_inicio <= $3 AND (ah.fecha_fin IS NULL OR ah.fecha_fin >= $2))
+          OR
+          -- No recurrentes: deben estar dentro del rango de fechas
+          (ah.es_recurrente = false 
+           AND ah.fecha_inicio <= $3 
+           AND (ah.fecha_fin IS NULL OR ah.fecha_fin >= $2))
         )
       ORDER BY ah.hora_inicio
     `;
