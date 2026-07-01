@@ -1450,50 +1450,6 @@ export const obtenerActividadesPredefinidas = async () => {
 };
 
 
-// ===== NUEVAS FUNCIONES PARA ACTIVIDADES BASE =====
-
-/**
- * Obtener todas las actividades base (únicas por nombre, tipo, color, desc)
- */
-export const obtenerActividadesBase = async (usuarioId) => {
-  let client;
-  try {
-    client = await pool.connect();
-    // Obtener adulto mayor
-    const adultoMayorResult = await client.query(
-      `SELECT am.id FROM adultos_mayores am
-       INNER JOIN familiares f ON am.id = f.adulto_mayor_id
-       WHERE f.usuario_id = $1
-       ORDER BY f.es_principal DESC LIMIT 1`,
-      [usuarioId]
-    );
-    if (adultoMayorResult.rows.length === 0) {
-      return { exito: true, actividades: [] };
-    }
-    const adulto_mayor_id = adultoMayorResult.rows[0].id;
-
-    // Obtener actividades base agrupadas por nombre, tipo, color, descripción
-    const query = `
-      SELECT DISTINCT ON (nombre, tipo, color, descripcion)
-        id,
-        nombre,
-        tipo,
-        color,
-        descripcion,
-        creado_en
-      FROM actividades_horario
-      WHERE adulto_mayor_id = $1 AND activa = true
-      ORDER BY nombre, tipo, color, descripcion, creado_en DESC
-    `;
-    const result = await client.query(query, [adulto_mayor_id]);
-    return { exito: true, actividades: result.rows };
-  } catch (error) {
-    console.error('Error en obtenerActividadesBase:', error);
-    return { exito: false, error: error.message };
-  } finally {
-    if (client) client.release();
-  }
-};
 
 /**
  * Crear una nueva actividad base (solo nombre, tipo, color, descripción)
@@ -1503,7 +1459,7 @@ export const obtenerActividadesBase = async (usuarioId) => {
 export const crearActividadBase = async (usuarioId, datos) => {
   let client;
   try {
-    const { nombre, tipo, color, descripcion } = datos;
+    const { nombre, tipo, color, descripcion, emoji } = datos;
     if (!nombre) return { exito: false, error: 'Nombre requerido' };
 
     client = await pool.connect();
@@ -1522,13 +1478,13 @@ export const crearActividadBase = async (usuarioId, datos) => {
     // Insertar una actividad base (sin días ni horarios, se agregarán después)
     const query = `
       INSERT INTO actividades_horario (
-        usuario_id, adulto_mayor_id, nombre, tipo, color, descripcion,
+        usuario_id, adulto_mayor_id, nombre, tipo, color, descripcion, emoji,
         dias, hora_inicio, hora_fin, duracion_minutos, es_recurrente,
         activa, creado_por
-      ) VALUES ($1, $2, $3, $4, $5, $6, '[]'::jsonb, '00:00', '00:00', 0, false, true, $1)
-      RETURNING id, nombre, tipo, color, descripcion
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, '[]'::jsonb, '00:00', '00:00', 0, false, true, $1)
+      RETURNING id, nombre, tipo, color, descripcion, emoji
     `;
-    const result = await client.query(query, [usuarioId, adulto_mayor_id, nombre, tipo, color, descripcion]);
+    const result = await client.query(query, [usuarioId, adulto_mayor_id, nombre, tipo, color, descripcion, emoji || '📌']);
     return { exito: true, actividad: result.rows[0] };
   } catch (error) {
     console.error('Error en crearActividadBase:', error);
@@ -1663,31 +1619,151 @@ export const obtenerOcurrenciasPorRango = async (usuarioId, fechaInicio, fechaFi
   }
 };
 
+// ============================================================
+// FUNCIONES PARA INICIALIZAR ACTIVIDADES PREDEFINIDAS
+// ============================================================
+
 /**
- * Crear una nueva ocurrencia (asociada a una actividad base)
+ * Obtener o crear actividades predefinidas para un adulto mayor
  */
+const obtenerOCrearPredefinidas = async (adulto_mayor_id, usuarioId) => {
+  // Lista de actividades predefinidas con sus colores y emojis
+  const predefinidas = [
+    { nombre: 'Bañarse', color: '#1abc9c', emoji: '🚿', tipo: 'cuidado_personal' },
+    { nombre: 'Comer', color: '#e67e22', emoji: '🍽️', tipo: 'alimentacion' },
+    { nombre: 'Tomar Medicina', color: '#2ecc71', emoji: '💊', tipo: 'salud' },
+    { nombre: 'Caminar', color: '#3498db', emoji: '🚶', tipo: 'ejercicio' },
+    { nombre: 'Descansar', color: '#9b59b6', emoji: '🛌', tipo: 'descanso' },
+    { nombre: 'Lectura', color: '#34495e', emoji: '📚', tipo: 'recreacion' },
+    { nombre: 'Ejercicios', color: '#e74c3c', emoji: '💪', tipo: 'ejercicio' },
+    { nombre: 'Socializar', color: '#f39c12', emoji: '👪', tipo: 'social' },
+  ];
+
+  const creadas = [];
+  for (const p of predefinidas) {
+    // Verificar si ya existe en la BD para este adulto_mayor
+    const check = await pool.query(
+      `SELECT id FROM actividades_horario 
+       WHERE adulto_mayor_id = $1 AND nombre = $2 AND activa = true`,
+      [adulto_mayor_id, p.nombre]
+    );
+    if (check.rows.length === 0) {
+      // Insertar predefinida
+      const insert = await pool.query(
+        `INSERT INTO actividades_horario (
+          usuario_id, adulto_mayor_id, nombre, tipo, color, emoji,
+          dias, hora_inicio, hora_fin, duracion_minutos, es_recurrente,
+          activa, creado_por
+        ) VALUES ($1, $2, $3, $4, $5, $6, '[]'::jsonb, '00:00', '00:00', 0, true, true, $1)
+        RETURNING id, nombre, tipo, color, emoji`,
+        [usuarioId, adulto_mayor_id, p.nombre, p.tipo, p.color, p.emoji]
+      );
+      creadas.push(insert.rows[0]);
+    } else {
+      // Ya existe, obtener sus datos
+      creadas.push(check.rows[0]);
+    }
+  }
+  return creadas;
+};
+
+// ============================================================
+//  ACTIVIDADES BASE (MODIFICADO)
+// ============================================================
+
+export const obtenerActividadesBase = async (usuarioId) => {
+  let client;
+  try {
+    client = await pool.connect();
+    // Obtener adulto mayor
+    const adultoMayorResult = await client.query(
+      `SELECT am.id FROM adultos_mayores am
+       INNER JOIN familiares f ON am.id = f.adulto_mayor_id
+       WHERE f.usuario_id = $1
+       ORDER BY f.es_principal DESC LIMIT 1`,
+      [usuarioId]
+    );
+    if (adultoMayorResult.rows.length === 0) {
+      return { exito: true, actividades: [] };
+    }
+    const adulto_mayor_id = adultoMayorResult.rows[0].id;
+
+    // 1. Asegurar que existen las predefinidas en la BD
+    await obtenerOCrearPredefinidas(adulto_mayor_id, usuarioId);
+
+    // 2. Obtener TODAS las actividades (predefinidas + creadas por usuario)
+    const query = `
+      SELECT 
+        id, 
+        nombre, 
+        tipo, 
+        color, 
+        descripcion, 
+        emoji,
+        creado_en
+      FROM actividades_horario
+      WHERE adulto_mayor_id = $1 
+        AND activa = true
+      ORDER BY nombre
+    `;
+    const result = await client.query(query, [adulto_mayor_id]);
+
+    return { exito: true, actividades: result.rows };
+  } catch (error) {
+    console.error('Error en obtenerActividadesBase:', error);
+    return { exito: false, error: error.message };
+  } finally {
+    if (client) client.release();
+  }
+};
+
+// ============================================================
+// CREAR OCURRENCIA (MODIFICADO - con validación mejorada)
+// ============================================================
+
 export const crearOcurrencia = async (usuarioId, datos) => {
   let client;
   try {
     const { actividad_base_id, dias, hora_inicio, hora_fin, duracion_minutos, esRecurrente, fecha_inicio, fecha_fin } = datos;
+
     if (!actividad_base_id || !dias || dias.length === 0 || !hora_inicio || !hora_fin) {
       return { exito: false, error: 'Faltan datos requeridos' };
     }
 
     client = await pool.connect();
-    // Obtener los datos de la actividad base (nombre, tipo, color, desc)
-    const baseQuery = `SELECT nombre, tipo, color, descripcion, adulto_mayor_id FROM actividades_horario WHERE id = $1`;
-    const baseResult = await client.query(baseQuery, [actividad_base_id]);
-    if (baseResult.rows.length === 0) return { exito: false, error: 'Actividad base no encontrada' };
-    const { nombre, tipo, color, descripcion, adulto_mayor_id } = baseResult.rows[0];
 
-    // Insertar nueva ocurrencia
+    // Obtener adulto mayor y verificar que la actividad existe y pertenece al adulto mayor
+    const adultoMayorResult = await client.query(
+      `SELECT am.id FROM adultos_mayores am
+       INNER JOIN familiares f ON am.id = f.adulto_mayor_id
+       WHERE f.usuario_id = $1
+       ORDER BY f.es_principal DESC LIMIT 1`,
+      [usuarioId]
+    );
+    if (adultoMayorResult.rows.length === 0) {
+      return { exito: false, error: 'Adulto mayor no encontrado' };
+    }
+    const adulto_mayor_id = adultoMayorResult.rows[0].id;
+
+    // Verificar que la actividad base existe y pertenece a este adulto mayor
+    const baseQuery = `
+      SELECT nombre, tipo, color, descripcion, emoji 
+      FROM actividades_horario 
+      WHERE id = $1 AND adulto_mayor_id = $2 AND activa = true
+    `;
+    const baseResult = await client.query(baseQuery, [actividad_base_id, adulto_mayor_id]);
+    if (baseResult.rows.length === 0) {
+      return { exito: false, error: 'Actividad base no encontrada o no pertenece a este adulto mayor' };
+    }
+    const { nombre, tipo, color, descripcion, emoji } = baseResult.rows[0];
+
+    // Insertar ocurrencia
     const query = `
       INSERT INTO actividades_horario (
-        usuario_id, adulto_mayor_id, nombre, tipo, color, descripcion,
+        usuario_id, adulto_mayor_id, nombre, tipo, color, descripcion, emoji,
         dias, hora_inicio, hora_fin, duracion_minutos, es_recurrente,
         fecha_inicio, fecha_fin, activa, creado_por
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true, $1)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true, $1)
       RETURNING *
     `;
     const values = [
@@ -1696,7 +1772,8 @@ export const crearOcurrencia = async (usuarioId, datos) => {
       nombre,
       tipo,
       color,
-      descripcion,
+      descripcion || '',
+      emoji || '📌',
       JSON.stringify(dias),
       hora_inicio,
       hora_fin,
@@ -1714,6 +1791,27 @@ export const crearOcurrencia = async (usuarioId, datos) => {
     if (client) client.release();
   }
 };
+
+// ============================================================
+// ELIMINAR OCURRENCIA (MODIFICADO - para que funcione bien)
+// ============================================================
+
+export const eliminarOcurrencia = async (ocurrenciaId) => {
+  let client;
+  try {
+    client = await pool.connect();
+    const query = `UPDATE actividades_horario SET activa = false, actualizado_en = NOW() WHERE id = $1 RETURNING id`;
+    const result = await client.query(query, [ocurrenciaId]);
+    if (result.rowCount === 0) return { exito: false, error: 'Ocurrencia no encontrada' };
+    return { exito: true };
+  } catch (error) {
+    console.error('Error en eliminarOcurrencia:', error);
+    return { exito: false, error: error.message };
+  } finally {
+    if (client) client.release();
+  }
+};
+
 
 /**
  * Actualizar ocurrencia existente
@@ -1753,24 +1851,6 @@ export const actualizarOcurrencia = async (ocurrenciaId, datos) => {
   }
 };
 
-/**
- * Eliminar ocurrencia (borrado lógico)
- */
-export const eliminarOcurrencia = async (ocurrenciaId) => {
-  let client;
-  try {
-    client = await pool.connect();
-    const query = `UPDATE actividades_horario SET activa = false, actualizado_en = NOW() WHERE id = $1 RETURNING id`;
-    const result = await client.query(query, [ocurrenciaId]);
-    if (result.rowCount === 0) return { exito: false, error: 'Ocurrencia no encontrada' };
-    return { exito: true };
-  } catch (error) {
-    console.error('Error en eliminarOcurrencia:', error);
-    return { exito: false, error: error.message };
-  } finally {
-    if (client) client.release();
-  }
-};
 
 // ==================== EXPORTACIÓN ====================
 
