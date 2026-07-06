@@ -81,6 +81,7 @@ app.use(cors({
       'https://www.cuidame-app.com',
       'http://localhost:3000',
       'http://localhost:19006',
+      'http://localhost:8082',
       'exp://192.168.1.*:19000',
       // 🔥 AGREGA ESTO:
       'https://ueq1jka-divinablasfemia-8081.exp.direct',
