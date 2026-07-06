@@ -1451,11 +1451,6 @@ export const obtenerActividadesPredefinidas = async () => {
 
 
 
-/**
- * Crear una nueva actividad base (solo nombre, tipo, color, descripción)
- * Esto crea un registro en actividades_horario con valores por defecto para días y horarios,
- * pero sin asociación a horarios concretos. Luego el usuario podrá añadir ocurrencias.
- */
 export const crearActividadBase = async (usuarioId, datos) => {
   let client;
   try {
@@ -1475,7 +1470,20 @@ export const crearActividadBase = async (usuarioId, datos) => {
     }
     const adulto_mayor_id = adultoMayorResult.rows[0].id;
 
-    // Insertar una actividad base (sin días ni horarios, se agregarán después)
+    // 🔹 VERIFICAR SI YA EXISTE UNA ACTIVIDAD CON EL MISMO NOMBRE
+    const existQuery = `
+      SELECT id, nombre, tipo, color, descripcion, emoji
+      FROM actividades_horario
+      WHERE adulto_mayor_id = $1 AND nombre = $2 AND activa = true
+      LIMIT 1
+    `;
+    const existResult = await client.query(existQuery, [adulto_mayor_id, nombre]);
+    if (existResult.rows.length > 0) {
+      // Ya existe, devolver esa (reutilizar)
+      return { exito: true, actividad: existResult.rows[0], reutilizada: true };
+    }
+
+    // Si no existe, insertar nueva
     const query = `
       INSERT INTO actividades_horario (
         usuario_id, adulto_mayor_id, nombre, tipo, color, descripcion, emoji,
@@ -1485,7 +1493,7 @@ export const crearActividadBase = async (usuarioId, datos) => {
       RETURNING id, nombre, tipo, color, descripcion, emoji
     `;
     const result = await client.query(query, [usuarioId, adulto_mayor_id, nombre, tipo, color, descripcion, emoji || '📌']);
-    return { exito: true, actividad: result.rows[0] };
+    return { exito: true, actividad: result.rows[0], reutilizada: false };
   } catch (error) {
     console.error('Error en crearActividadBase:', error);
     return { exito: false, error: error.message };
@@ -1493,7 +1501,6 @@ export const crearActividadBase = async (usuarioId, datos) => {
     if (client) client.release();
   }
 };
-
 /**
  * Actualizar actividad base (nombre, tipo, color, descripción) en TODAS las ocurrencias
  * que coincidan con el id de la actividad base (agrupación por nombre y adulto_mayor_id)
