@@ -1593,6 +1593,7 @@ export const obtenerOcurrenciasPorRango = async (usuarioId, fechaInicio, fechaFi
         ah.tipo,
         ah.color,
         ah.descripcion,
+        ah.emoji,
         ah.dias,
         ah.hora_inicio,
         ah.hora_fin,
