@@ -1675,7 +1675,6 @@ export const obtenerActividadesBase = async (usuarioId) => {
   let client;
   try {
     client = await pool.connect();
-    // Obtener adulto mayor
     const adultoMayorResult = await client.query(
       `SELECT am.id FROM adultos_mayores am
        INNER JOIN familiares f ON am.id = f.adulto_mayor_id
@@ -1688,10 +1687,8 @@ export const obtenerActividadesBase = async (usuarioId) => {
     }
     const adulto_mayor_id = adultoMayorResult.rows[0].id;
 
-    // 1. Asegurar que existen las predefinidas en la BD
     await obtenerOCrearPredefinidas(adulto_mayor_id, usuarioId);
 
-    // 2. Obtener TODAS las actividades (predefinidas + creadas por usuario)
     const query = `
       SELECT 
         id, 
@@ -1699,7 +1696,7 @@ export const obtenerActividadesBase = async (usuarioId) => {
         tipo, 
         color, 
         descripcion, 
-        emoji,
+        COALESCE(emoji, '📌') as emoji,  -- 🔹 AQUÍ EL CAMBIO
         creado_en
       FROM actividades_horario
       WHERE adulto_mayor_id = $1 
@@ -1716,7 +1713,6 @@ export const obtenerActividadesBase = async (usuarioId) => {
     if (client) client.release();
   }
 };
-
 // ============================================================
 // CREAR OCURRENCIA (MODIFICADO - con validación mejorada)
 // ============================================================
