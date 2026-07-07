@@ -1509,24 +1509,23 @@ export const crearActividadBase = async (usuarioId, datos) => {
 export const actualizarActividadBase = async (actividadBaseId, datos) => {
   let client;
   try {
-    const { nombre, tipo, color, descripcion } = datos;
+    const { nombre, tipo, color, descripcion, emoji } = datos;
     if (!nombre) return { exito: false, error: 'Nombre requerido' };
 
     client = await pool.connect();
-    // Primero obtener el adulto_mayor_id y el nombre actual para agrupar
     const baseQuery = `SELECT adulto_mayor_id, nombre FROM actividades_horario WHERE id = $1`;
     const baseResult = await client.query(baseQuery, [actividadBaseId]);
     if (baseResult.rows.length === 0) return { exito: false, error: 'Actividad base no encontrada' };
     const { adulto_mayor_id, nombre: nombreActual } = baseResult.rows[0];
 
-    // Actualizar todas las ocurrencias con el mismo nombre y adulto_mayor_id
+    // Actualizar todas las ocurrencias con el mismo nombre y adulto_mayor_id, incluyendo emoji
     const query = `
       UPDATE actividades_horario
-      SET nombre = $1, tipo = $2, color = $3, descripcion = $4, actualizado_en = NOW()
-      WHERE adulto_mayor_id = $5 AND nombre = $6 AND activa = true
-      RETURNING id, nombre, tipo, color, descripcion
+      SET nombre = $1, tipo = $2, color = $3, descripcion = $4, emoji = $5, actualizado_en = NOW()
+      WHERE adulto_mayor_id = $6 AND nombre = $7 AND activa = true
+      RETURNING id, nombre, tipo, color, descripcion, emoji
     `;
-    const result = await client.query(query, [nombre, tipo, color, descripcion, adulto_mayor_id, nombreActual]);
+    const result = await client.query(query, [nombre, tipo, color, descripcion, emoji || '📌', adulto_mayor_id, nombreActual]);
     return { exito: true, actualizadas: result.rowCount };
   } catch (error) {
     console.error('Error en actualizarActividadBase:', error);
@@ -1535,7 +1534,6 @@ export const actualizarActividadBase = async (actividadBaseId, datos) => {
     if (client) client.release();
   }
 };
-
 /**
  * Eliminar actividad base (y todas sus ocurrencias)
  */
