@@ -632,7 +632,7 @@ export const eliminarMedicina = async (medicinaId, usuarioId) => {
 /**
  * 7. Marcar medicina como tomada
  */
-export const marcarMedicinaTomada = async (medicinaId, usuarioId, datos) => {
+const marcarMedicinaTomada = async (medicinaId, usuarioId, datos) => {
   let client;
 
   try {
@@ -1504,15 +1504,7 @@ const registrarMovimientoStock = async (movimiento) => {
 };
 
 
-/**
- * Eliminar una toma de medicina específica (deshacer toma)
- */
-/**
- * Eliminar una toma específica de medicina (deshacer toma)
- */
-/**
- * Eliminar una toma de medicina específica (deshacer toma)
- */
+
 /**
  * Eliminar una toma de medicina específica (deshacer toma)
  */
@@ -1520,6 +1512,7 @@ const eliminarTomaMedicina = async (usuarioId, medicinaId, horario) => {
   let client;
   try {
     const hoy = new Date().toISOString().split('T')[0];
+    console.log('🔍 [ELIMINAR TOMA] Buscando toma para:', { medicinaId, horario, fecha: hoy, usuarioId });
 
     client = await pool.connect();
 
@@ -1538,42 +1531,82 @@ const eliminarTomaMedicina = async (usuarioId, medicinaId, horario) => {
 
     const adulto_mayor_id = verifyResult.rows[0].adulto_mayor_id;
 
-    // Eliminar el registro de toma para ese día, horario y usuario
+    // Primero, verificar si existe el registro con las condiciones (para depuración)
+    const checkQuery = `
+      SELECT id, horario, fecha_toma 
+      FROM registros_medicina 
+      WHERE medicina_id = $1 
+        AND fecha_toma = $2 
+        AND horario = $3
+        AND adulto_mayor_id = $4
+    `;
+    const checkResult = await client.query(checkQuery, [
+      medicinaId,
+      hoy,
+      horario,
+      adulto_mayor_id
+    ]);
+
+    console.log('🔍 [ELIMINAR TOMA] Registro encontrado?', checkResult.rows.length > 0 ? 'SÍ' : 'NO');
+    if (checkResult.rows.length > 0) {
+      console.log('🔍 [ELIMINAR TOMA] Registro:', checkResult.rows[0]);
+    }
+
+    // Eliminar sin usar usuario_id (ya tenemos adulto_mayor_id)
     const deleteQuery = `
       DELETE FROM registros_medicina 
       WHERE medicina_id = $1 
         AND fecha_toma = $2 
         AND horario = $3
-        AND usuario_id = $4
-        AND adulto_mayor_id = $5
+        AND adulto_mayor_id = $4
       RETURNING id
     `;
     const deleteResult = await client.query(deleteQuery, [
       medicinaId,
       hoy,
       horario,
-      usuarioId,
       adulto_mayor_id
     ]);
 
     if (deleteResult.rowCount === 0) {
-      return { exito: false, error: 'No se encontró la toma para eliminar' };
+      // Si no se eliminó, intentar sin adulto_mayor_id (solo por si acaso)
+      const deleteFallback = await client.query(`
+        DELETE FROM registros_medicina 
+        WHERE medicina_id = $1 
+          AND fecha_toma = $2 
+          AND horario = $3
+        RETURNING id
+      `, [medicinaId, hoy, horario]);
+
+      if (deleteFallback.rowCount === 0) {
+        return { exito: false, error: 'No se encontró la toma para eliminar (verifica fecha y horario)' };
+      } else {
+        console.log('✅ [ELIMINAR TOMA] Eliminado sin adulto_mayor_id (fallback)');
+        // Aumentar stock
+        await client.query(
+          `UPDATE medicinas SET stock_actual = stock_actual + 1 WHERE id = $1`,
+          [medicinaId]
+        );
+        return { exito: true, mensaje: 'Toma eliminada correctamente (fallback)' };
+      }
     }
 
-    // Aumentar el stock en 1 (opcional)
+    // Aumentar el stock en 1
     await client.query(
       `UPDATE medicinas SET stock_actual = stock_actual + 1 WHERE id = $1`,
       [medicinaId]
     );
 
+    console.log('✅ [ELIMINAR TOMA] Toma eliminada correctamente');
     return { exito: true, mensaje: 'Toma eliminada correctamente' };
   } catch (error) {
-    console.error('Error eliminando toma:', error);
+    console.error('❌ Error eliminando toma:', error);
     return { exito: false, error: error.message };
   } finally {
     if (client) client.release();
   }
 };
+
 // ==================== EXPORTACIÓN ====================
 
 export default {
