@@ -1,5 +1,6 @@
 // controladores/calendarioControlador.js - Controlador de Calendario Unificado
 import { pool } from '../configuracion/basedeDatos.js';
+import { crearNotificacion, notificarAFamiliares } from './notificacionesControlador.js';
 
 // ==================== FUNCIONES DE CONFIGURACIÓN ====================
 
@@ -775,6 +776,18 @@ export const crearEvento = async (usuarioId, evento) => {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *
     `;
+
+    // Notificar a todos los familiares (excepto al creador)
+    const mensaje = `Nuevo evento "${titulo}" programado para ${fecha_inicio}`;
+    await notificarAFamiliares(
+      adulto_mayor_id,
+      'evento_nuevo',
+      mensaje,
+      eventoId,
+      'eventos',
+      usuario_id,
+      usuario_id
+    );
 
     const values = [
       evento.titulo.trim(),

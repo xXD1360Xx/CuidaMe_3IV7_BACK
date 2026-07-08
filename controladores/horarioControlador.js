@@ -1,5 +1,6 @@
 // controladores/horarioControlador.js - Controlador de Horario Unificado
 import { pool } from '../configuracion/basedeDatos.js';
+import { crearNotificacion, notificarAFamiliares } from './notificacionesControlador.js';
 
 // ==================== FUNCIONES DE CONFIGURACIÓN ====================
 
@@ -391,6 +392,19 @@ export const crearActividad = async (usuarioId, actividad) => {
       ORDER BY f.es_principal DESC
       LIMIT 1
     `;
+
+
+
+    const mensaje = `Nueva actividad "${nombre}" ha sido creada`;
+    await notificarAFamiliares(
+      adulto_mayor_id,
+      'actividad_nueva',
+      mensaje,
+      actividadId,
+      'actividades',
+      usuario_id,
+      usuario_id
+    );
 
     const adultoMayorResult = await client.query(adultoMayorQuery, [usuarioId]);
 

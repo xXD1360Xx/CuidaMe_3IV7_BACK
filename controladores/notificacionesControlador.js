@@ -136,10 +136,6 @@ export const obtenerFamiliaresDeAdulto = async (adulto_mayor_id) => {
     SELECT usuario_id
     FROM familiares
     WHERE adulto_mayor_id = $1
-    UNION
-    SELECT usuario_id
-    FROM adultos_mayores
-    WHERE id = $1 AND usuario_id IS NOT NULL
   `;
     try {
         const result = await pool.query(query, [adulto_mayor_id]);
@@ -173,31 +169,28 @@ export const notificarAFamiliares = async (
 ) => {
     try {
         const usuarios = await obtenerFamiliaresDeAdulto(adulto_mayor_id);
-        if (usuarios.length === 0) return;
+        if (!usuarios.length) return;
 
-        // Filtrar el usuario excluido si se especifica
         const destinatarios = excepto_usuario_id
             ? usuarios.filter(id => id !== excepto_usuario_id)
             : usuarios;
 
-        if (destinatarios.length === 0) return;
+        if (!destinatarios.length) return;
 
-        // Crear notificación para cada familiar
-        const queries = destinatarios.map(usuario_id => {
-            return crearNotificacion({
+        const queries = destinatarios.map(usuario_id =>
+            crearNotificacion({
                 usuario_id,
                 tipo,
                 mensaje,
                 referencia_id,
                 referencia_tipo,
-                emisor_id,
-            });
-        });
+                emisor_id
+            })
+        );
 
         await Promise.all(queries);
-        console.log(`✅ Notificaciones enviadas a ${destinatarios.length} familiar(es)`);
     } catch (error) {
-        console.error('❌ Error al notificar a familiares:', error.message);
+        console.error('❌ Error en notificarAFamiliares:', error.message);
         throw error;
     }
 };

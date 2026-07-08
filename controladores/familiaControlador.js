@@ -1,6 +1,7 @@
 // controladores/familiaControlador.js - Controlador de Gestión Familiar
 import { pool } from '../configuracion/basedeDatos.js';
 import crypto from 'crypto';
+import { crearNotificacion, notificarAFamiliares } from './notificacionesControlador.js';
 
 // ==================== FUNCIONES DE GRUPOS FAMILIARES ====================
 
@@ -529,6 +530,18 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, false, 'activo', NOW())
         RETURNING id, nombre, email, telefono, rol
       `;
+
+      // Notificar a todos los familiares (excepto al creador)
+      const mensaje = `Nuevo evento "${titulo}" programado para ${fecha_inicio}`;
+      await notificarAFamiliares(
+        adulto_mayor_id,
+        'evento_nuevo',
+        mensaje,
+        eventoId,
+        'eventos',
+        usuario_id,
+        usuario_id
+      );
 
       const usuarioResult = await client.query(insertUsuarioQuery, [
         nombre,
