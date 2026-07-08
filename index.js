@@ -8,7 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { autenticarUsuario } from './middleware/autenticacionMiddleware.js';
 import { enviarCodigo } from './controladores/emailControlador.js';
-import notificacionesRutas from './rutas/notificacionesRutas.js';
+import rutasNotificaciones from './rutas/rutasNotificaciones.js';
 
 
 
@@ -350,7 +350,7 @@ console.log('\n🔧 MONTANDO RUTAS DE LA API...');
 app.use('/api/auth', rutasAutenticacion);
 console.log('✅ Rutas montadas en /api/auth');
 
-app.use('/api/notificaciones', notificacionesRutas);
+app.use('/api/notificaciones', rutasNotificaciones);
 console.log('✅ Rutas montadas en /api/notificaciones');
 
 
