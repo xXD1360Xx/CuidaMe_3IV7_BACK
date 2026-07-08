@@ -16,10 +16,7 @@ export const obtenerAdultoMayorPrincipal = async (usuarioId) => {
 
     // Obtener el adulto mayor principal del usuario
     const query = `
-      SELECT 
-        am.*,
-        f.es_principal,
-        f.rol_familiar
+      SELECT am.*, f.es_principal, f.rol_familiar
       FROM adultos_mayores am
       INNER JOIN familiares f ON am.id = f.adulto_mayor_id
       WHERE f.usuario_id = $1

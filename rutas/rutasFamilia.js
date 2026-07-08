@@ -472,7 +472,6 @@ router.post('/resumen-grupo', autenticarUsuario, async (req, res) => {
       });
     }
 
-    // Obtener grupo familiar completo
     const grupoResult = await familiaControlador.obtenerGrupoFamiliar(usuario_id);
 
     if (!grupoResult.exito) {
@@ -482,12 +481,10 @@ router.post('/resumen-grupo', autenticarUsuario, async (req, res) => {
 
     const { grupo } = grupoResult;
 
-    // Calcular estadísticas
     const totalMiembros = grupo.miembros?.length || 0;
     const totalAdministradores = grupo.miembros?.filter(m => m.rol_en_grupo === 'admin').length || 0;
     const totalResponsables = grupo.miembros?.filter(m => m.rol_en_grupo === 'responsable').length || 0;
 
-    // Calcular distribución por parentesco
     const parentescos = {};
     if (grupo.miembros) {
       grupo.miembros.forEach(miembro => {
@@ -499,7 +496,6 @@ router.post('/resumen-grupo', autenticarUsuario, async (req, res) => {
       });
     }
 
-    // Calcular distribución por género
     const generos = {};
     if (grupo.miembros) {
       grupo.miembros.forEach(miembro => {
@@ -511,14 +507,8 @@ router.post('/resumen-grupo', autenticarUsuario, async (req, res) => {
       });
     }
 
-    // Obtener actividad reciente (últimos 7 días)
     let actividadReciente = [];
     try {
-      const sieteDiasAtras = new Date();
-      sieteDiasAtras.setDate(sieteDiasAtras.getDate() - 7);
-
-      // Aquí podrías consultar actividades reales del grupo
-      // Por ahora, creamos datos de ejemplo
       actividadReciente = [
         {
           tipo: 'miembro_unido',
@@ -536,8 +526,8 @@ router.post('/resumen-grupo', autenticarUsuario, async (req, res) => {
         total_miembros: totalMiembros,
         total_administradores: totalAdministradores,
         total_responsables: totalResponsables,
-        parentescos: parentescos,
-        generos: generos,
+        parentescos,
+        generos,
         tiene_adulto_mayor: !!grupo.adulto_mayor,
         fecha_creacion: grupo.fecha_creacion
       },
@@ -587,7 +577,6 @@ router.post('/verificar-permisos', autenticarUsuario, async (req, res) => {
       });
     }
 
-    // Obtener grupo del usuario
     const grupoResult = await familiaControlador.obtenerGrupoFamiliar(usuario_id);
 
     if (!grupoResult.exito) {
@@ -595,8 +584,6 @@ router.post('/verificar-permisos', autenticarUsuario, async (req, res) => {
     }
 
     const { grupo } = grupoResult;
-
-    // Buscar al usuario en los miembros del grupo
     const usuarioEnGrupo = grupo.miembros?.find(m => m.id === usuario_id);
 
     if (!usuarioEnGrupo) {
@@ -607,14 +594,12 @@ router.post('/verificar-permisos', autenticarUsuario, async (req, res) => {
       });
     }
 
-    // Verificar permisos específicos si se requieren
     let tienePermisos = true;
     const permisosVerificados = {};
 
     if (permisos_requeridos && Array.isArray(permisos_requeridos)) {
       permisos_requeridos.forEach(permiso => {
         let tienePermiso = false;
-
         switch (permiso) {
           case 'administrar_grupo':
             tienePermiso = usuarioEnGrupo.rol_en_grupo === 'admin';
@@ -623,7 +608,7 @@ router.post('/verificar-permisos', autenticarUsuario, async (req, res) => {
             tienePermiso = usuarioEnGrupo.rol_en_grupo === 'admin' || usuarioEnGrupo.rol_en_grupo === 'responsable';
             break;
           case 'ver_todo':
-            tienePermiso = true; // Todos los miembros pueden ver
+            tienePermiso = true;
             break;
           case 'editar_adulto_mayor':
             tienePermiso = usuarioEnGrupo.rol_en_grupo === 'admin' || usuarioEnGrupo.rol_en_grupo === 'responsable';
@@ -634,7 +619,6 @@ router.post('/verificar-permisos', autenticarUsuario, async (req, res) => {
           default:
             tienePermiso = false;
         }
-
         permisosVerificados[permiso] = tienePermiso;
         if (!tienePermiso) tienePermisos = false;
       });
@@ -682,7 +666,6 @@ router.post('/exportar-grupo', autenticarUsuario, async (req, res) => {
       });
     }
 
-    // Obtener información completa del grupo
     const grupoResult = await familiaControlador.obtenerGrupoFamiliar(usuario_id);
 
     if (!grupoResult.exito) {
@@ -690,12 +673,9 @@ router.post('/exportar-grupo', autenticarUsuario, async (req, res) => {
     }
 
     const { grupo } = grupoResult;
-
-    // Obtener adulto mayor si existe
     const adultoMayorResult = await familiaControlador.obtenerAdultoMayor(usuario_id);
     const adultoMayor = adultoMayorResult.exito ? adultoMayorResult.adulto_mayor : null;
 
-    // Preparar datos para exportación
     const datosExportacion = {
       grupo: {
         nombre: grupo.nombre_grupo,
@@ -774,9 +754,6 @@ router.post('/sincronizar', autenticarUsuario, async (req, res) => {
 
     console.log('🔄 Sincronizando grupo familiar para usuario:', usuario_id);
 
-    // Aquí implementarías la lógica de sincronización
-    // Por ahora, devolvemos un estado básico
-
     res.status(200).json({
       exito: true,
       sincronizado_en: new Date().toISOString(),
@@ -794,8 +771,81 @@ router.post('/sincronizar', autenticarUsuario, async (req, res) => {
   }
 });
 
+// ==================== NUEVAS RUTAS: CREAR Y UNIRSE A GRUPO ====================
+
 /**
- * 17. Ruta de prueba
+ * 17. Crear nuevo grupo familiar (usuario se convierte en admin)
+ * POST /api/familia/crear-grupo
+ */
+router.post('/crear-grupo', autenticarUsuario, async (req, res) => {
+  try {
+    const { usuario_id, nombre_grupo } = req.body;
+
+    if (!usuario_id) {
+      return res.status(400).json({
+        exito: false,
+        error: 'ID de usuario es requerido',
+        codigo: 'USUARIO_ID_REQUERIDO'
+      });
+    }
+
+    const resultado = await familiaControlador.crearGrupoFamiliar(usuario_id, nombre_grupo || 'Mi Familia');
+
+    if (!resultado.exito) {
+      const statusCode = resultado.codigo === 'ERROR_GENERACION_CODIGO' ? 500 : 400;
+      return res.status(statusCode).json(resultado);
+    }
+
+    res.status(201).json(resultado);
+
+  } catch (error) {
+    console.error('❌ Error en ruta /crear-grupo:', error.message);
+    res.status(500).json({
+      exito: false,
+      error: 'Error interno del servidor',
+      codigo: 'ERROR_INTERNO'
+    });
+  }
+});
+
+/**
+ * 18. Unirse a grupo familiar existente
+ * POST /api/familia/unirse-grupo
+ */
+router.post('/unirse-grupo', autenticarUsuario, async (req, res) => {
+  try {
+    const { usuario_id, codigo_familiar } = req.body;
+
+    if (!usuario_id || !codigo_familiar) {
+      return res.status(400).json({
+        exito: false,
+        error: 'ID de usuario y código familiar son requeridos',
+        codigo: 'DATOS_INCOMPLETOS'
+      });
+    }
+
+    const resultado = await familiaControlador.unirseAGrupoFamiliar(usuario_id, codigo_familiar);
+
+    if (!resultado.exito) {
+      const statusCode = resultado.codigo === 'CODIGO_INVALIDO' ? 404 :
+        resultado.codigo === 'YA_EN_GRUPO' ? 409 : 400;
+      return res.status(statusCode).json(resultado);
+    }
+
+    res.status(200).json(resultado);
+
+  } catch (error) {
+    console.error('❌ Error en ruta /unirse-grupo:', error.message);
+    res.status(500).json({
+      exito: false,
+      error: 'Error interno del servidor',
+      codigo: 'ERROR_INTERNO'
+    });
+  }
+});
+
+/**
+ * 19. Ruta de prueba
  * GET /api/familia/status
  */
 router.get('/status', (req, res) => {

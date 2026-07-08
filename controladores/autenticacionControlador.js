@@ -1,4 +1,4 @@
-// controladores/authControlador.js - Controlador de Autenticación Unificado
+// controladores/authControlador.js - Controlador de Autenticación Unificado (CORREGIDO)
 import { pool } from '../configuracion/basedeDatos.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -20,7 +20,6 @@ export const iniciarSesion = async (identificador, contrasena) => {
   try {
     console.log('🔐 [AUTH] Login normal para:', identificador);
 
-    // Validaciones básicas
     if (!identificador || !contrasena) {
       return {
         exito: false,
@@ -31,7 +30,6 @@ export const iniciarSesion = async (identificador, contrasena) => {
 
     client = await pool.connect();
 
-    // Buscar usuario por email o username
     const query = `
       SELECT 
         u.id, 
@@ -80,38 +78,30 @@ export const iniciarSesion = async (identificador, contrasena) => {
     const hash = usuario.password.trim();
     let contrasenaValida = false;
 
-    // Detectar tipo de hash
     const esHashBcrypt = hash.startsWith('$2');
     const esHashSHA256 = hash.length === 64 && /^[a-f0-9]{64}$/i.test(hash);
 
-    // Verificar según tipo de hash
     if (esHashBcrypt) {
       contrasenaValida = await bcrypt.compare(contrasena, hash);
-
-      // Migrar a SHA256 si es necesario
       if (contrasenaValida) {
         const sha256Hash = crypto
           .createHash('sha256')
           .update(contrasena)
           .digest('hex')
           .toLowerCase();
-
         await client.query(
           'UPDATE usuarios SET password = $1 WHERE id = $2',
           [sha256Hash, usuario.id]
         );
       }
-    }
-    else if (esHashSHA256) {
+    } else if (esHashSHA256) {
       const hashCalculado = crypto
         .createHash('sha256')
         .update(contrasena)
         .digest('hex')
         .toLowerCase();
-
       contrasenaValida = hashCalculado === hash.toLowerCase();
-    }
-    else {
+    } else {
       return {
         exito: false,
         error: 'Error en datos de autenticación',
@@ -127,7 +117,6 @@ export const iniciarSesion = async (identificador, contrasena) => {
       };
     }
 
-    // Preparar datos del usuario para respuesta
     const usuarioRespuesta = {
       id: usuario.id,
       nombre: usuario.nombre,
@@ -143,12 +132,11 @@ export const iniciarSesion = async (identificador, contrasena) => {
         nombre: usuario.nombre_grupo,
         rol_en_grupo: usuario.rol_en_grupo
       } : null,
-      perfil_completo: true, // Porque tiene email y contraseña
+      perfil_completo: true,
       creado_en: usuario.creado_en,
       actualizado_en: usuario.actualizado_en
     };
 
-    // Generar token JWT
     const token = jwt.sign(
       {
         id: usuario.id,
@@ -162,7 +150,6 @@ export const iniciarSesion = async (identificador, contrasena) => {
       { expiresIn: JWT_EXPIRES_IN }
     );
 
-    // Actualizar último acceso
     await client.query(
       'UPDATE usuarios SET ultimo_acceso = NOW() WHERE id = $1',
       [usuario.id]
@@ -179,16 +166,13 @@ export const iniciarSesion = async (identificador, contrasena) => {
 
   } catch (error) {
     console.error('❌ Error en iniciarSesion:', error.message);
-
     return {
       exito: false,
       error: 'Error del servidor al iniciar sesión',
       codigo: 'ERROR_SERVIDOR'
     };
   } finally {
-    if (client) {
-      client.release();
-    }
+    if (client) client.release();
   }
 };
 
@@ -209,7 +193,6 @@ export const iniciarSesionConCodigoFamiliar = async (email, contrasena, codigoFa
       };
     }
 
-    // Limpiar código (quitar guiones)
     const codigoLimpio = codigoFamiliar.replace(/-/g, '').toUpperCase();
 
     if (codigoLimpio.length !== 6) {
@@ -222,7 +205,6 @@ export const iniciarSesionConCodigoFamiliar = async (email, contrasena, codigoFa
 
     client = await pool.connect();
 
-    // Primero autenticar usuario
     const usuarioResult = await iniciarSesion(email, contrasena);
 
     if (!usuarioResult.exito) {
@@ -231,7 +213,6 @@ export const iniciarSesionConCodigoFamiliar = async (email, contrasena, codigoFa
 
     const usuario = usuarioResult.usuario;
 
-    // Verificar que el usuario no pertenezca ya a un grupo
     if (usuario.grupo_familiar) {
       return {
         exito: false,
@@ -240,7 +221,6 @@ export const iniciarSesionConCodigoFamiliar = async (email, contrasena, codigoFa
       };
     }
 
-    // Buscar grupo familiar activo por código
     const grupoQuery = `
       SELECT 
         gf.id,
@@ -273,7 +253,6 @@ export const iniciarSesionConCodigoFamiliar = async (email, contrasena, codigoFa
 
     const grupo = grupoResult.rows[0];
 
-    // Verificar límite de integrantes
     if (grupo.total_miembros >= grupo.max_integrantes) {
       return {
         exito: false,
@@ -282,7 +261,6 @@ export const iniciarSesionConCodigoFamiliar = async (email, contrasena, codigoFa
       };
     }
 
-    // Asociar usuario al grupo familiar
     await client.query(`
       INSERT INTO usuario_grupo (
         usuario_id,
@@ -293,7 +271,6 @@ export const iniciarSesionConCodigoFamiliar = async (email, contrasena, codigoFa
       ) VALUES ($1, $2, 'familiar', 'activo', NOW())
     `, [usuario.id, grupo.id]);
 
-    // Generar nuevo token con información actualizada del grupo
     const tokenActualizado = jwt.sign(
       {
         id: usuario.id,
@@ -330,69 +307,52 @@ export const iniciarSesionConCodigoFamiliar = async (email, contrasena, codigoFa
 
   } catch (error) {
     console.error('❌ Error en iniciarSesionConCodigoFamiliar:', error.message);
-
     return {
       exito: false,
       error: 'Error al vincular con grupo familiar',
       codigo: 'ERROR_VINCULACION_GRUPO'
     };
   } finally {
-    if (client) {
-      client.release();
-    }
+    if (client) client.release();
   }
 };
 
 /**
  * 3. Iniciar sesión SOLO con código personalizado (sin email/contraseña)
+ * ✅ CORREGIDA: Devuelve objeto con exito/usuario/token, no usa req/res directamente
  */
-export const iniciarSesionConCodigoPersonalizado = async (codigoPersonalizado) => {
+export const iniciarSesionConCodigoPersonalizado = async (codigo_personalizado) => {
   let client;
 
   try {
-    console.log('✨ [AUTH] Login con código personalizado:', codigoPersonalizado);
+    console.log('✨ [AUTH] Login con código personalizado:', codigo_personalizado);
 
-    if (!codigoPersonalizado) {
+    if (!codigo_personalizado) {
       return {
         exito: false,
-        error: 'El código personalizado es requerido',
+        error: 'Código personalizado es requerido',
         codigo: 'CODIGO_REQUERIDO'
       };
     }
 
-    // Limpiar código (quitar guiones)
-    const codigoLimpio = codigoPersonalizado.replace(/-/g, '').toUpperCase();
-
-    if (codigoLimpio.length !== 6) {
-      return {
-        exito: false,
-        error: 'El código debe tener 6 caracteres',
-        codigo: 'CODIGO_LONGITUD_INVALIDA'
-      };
-    }
+    const codigoLimpio = codigo_personalizado.replace(/-/g, '').toUpperCase();
 
     client = await pool.connect();
 
-    // Buscar código personalizado activo
+    // 1. Buscar el código personalizado activo
     const codigoQuery = `
       SELECT 
-        cp.*,
+        cp.*, 
         gf.id as grupo_familiar_id,
-        gf.codigo_familiar,
-        gf.nombre_grupo,
-        gf.usuario_admin_id,
-        ua.nombre as admin_nombre,
-        ua.email as admin_email,
-        CASE 
-          WHEN cp.fecha_expiracion IS NOT NULL AND cp.fecha_expiracion < NOW() THEN 'expirado'
-          WHEN cp.max_usos IS NOT NULL AND cp.usos_actuales >= cp.max_usos THEN 'usado'
-          WHEN cp.activo = false THEN 'inactivo'
-          ELSE 'activo'
-        END as estado_codigo
+        am.id as adulto_mayor_id
       FROM codigos_personalizados cp
       JOIN grupos_familiares gf ON cp.grupo_familiar_id = gf.id
-      JOIN usuarios ua ON gf.usuario_admin_id = ua.id
+      LEFT JOIN adultos_mayores am ON am.grupo_familiar_id = gf.id
       WHERE cp.codigo = $1
+        AND cp.activo = true
+        AND (cp.fecha_expiracion IS NULL OR cp.fecha_expiracion > NOW())
+        AND (cp.max_usos IS NULL OR cp.usos_actuales < cp.max_usos)
+      LIMIT 1
     `;
 
     const codigoResult = await client.query(codigoQuery, [codigoLimpio]);
@@ -400,189 +360,115 @@ export const iniciarSesionConCodigoPersonalizado = async (codigoPersonalizado) =
     if (codigoResult.rows.length === 0) {
       return {
         exito: false,
-        error: 'Código personalizado no encontrado',
+        error: 'Código personalizado inválido, expirado o sin usos disponibles',
         codigo: 'CODIGO_NO_ENCONTRADO'
       };
     }
 
-    const codigoData = codigoResult.rows[0];
+    const codigo = codigoResult.rows[0];
+    const {
+      nombre, apellido, email, parentesco, rol_asignado,
+      grupo_familiar_id, adulto_mayor_id
+    } = codigo;
 
-    // Verificar estado del código
-    if (codigoData.estado_codigo !== 'activo') {
-      return {
-        exito: false,
-        error: `El código está ${codigoData.estado_codigo}`,
-        codigo: `CODIGO_${codigoData.estado_codido.toUpperCase()}`
-      };
+    // 2. Verificar si el usuario ya existe (por email si está disponible)
+    let usuarioId = null;
+    if (email) {
+      const userCheck = await client.query(
+        'SELECT id FROM usuarios WHERE email = $1 AND estado = $2',
+        [email, 'activo']
+      );
+      if (userCheck.rows.length > 0) {
+        usuarioId = userCheck.rows[0].id;
+      }
     }
 
-    // Buscar si ya existe un usuario creado con este código
-    const usuarioExistenteQuery = `
-      SELECT u.*, ug.rol_en_grupo
-      FROM usuarios u
-      JOIN usuario_grupo ug ON u.id = ug.usuario_id
-      WHERE ug.grupo_familiar_id = $1 
-        AND u.email IS NULL 
-        AND u.codigo_personalizado_id = $2
-        AND u.estado = 'activo'
-      LIMIT 1
-    `;
+    // 3. Si no existe, crear usuario con los datos del código
+    if (!usuarioId) {
+      const passwordTemp = Math.random().toString(36).slice(-8);
+      const passwordHash = crypto.createHash('sha256').update(passwordTemp).digest('hex').toLowerCase();
 
-    const usuarioExistenteResult = await client.query(usuarioExistenteQuery, [
-      codigoData.grupo_familiar_id,
-      codigoData.id
-    ]);
-
-    let usuario;
-    let nuevoUsuario = false;
-
-    if (usuarioExistenteResult.rows.length > 0) {
-      // Usar usuario existente creado con este código
-      usuario = usuarioExistenteResult.rows[0];
-      console.log('🔄 Usando usuario existente del código personalizado');
-    } else {
-      // Crear nuevo usuario temporal
-      const nombreUsuario = `${codigoData.nombre} ${codigoData.apellido}`.trim() ||
-        `Familiar ${codigoData.codigo.substring(0, 3)}`;
-
-      const passwordTemp = crypto
-        .createHash('sha256')
-        .update(codigoLimpio)
-        .digest('hex')
-        .toLowerCase();
-
-      const insertUsuarioQuery = `
+      const insertUser = await client.query(`
         INSERT INTO usuarios (
-          nombre,
-          email,
-          password,
-          rol,
-          codigo_personalizado_id,
-          necesita_completar_perfil,
-          estado,
-          creado_en
-        ) VALUES ($1, NULL, $2, $3, $4, true, 'activo', NOW())
-        RETURNING *
-      `;
+          nombre, apellido, email, password, rol, estado, 
+          necesita_completar_perfil, creado_en
+        ) VALUES ($1, $2, $3, $4, $5, 'activo', false, NOW())
+        RETURNING id
+      `, [nombre, apellido, email || null, passwordHash, rol_asignado || 'familiar']);
 
-      const usuarioTempResult = await client.query(insertUsuarioQuery, [
-        nombreUsuario,
-        passwordTemp,
-        codigoData.rol_asignado || 'familiar_secundario',
-        codigoData.id
-      ]);
-
-      usuario = usuarioTempResult.rows[0];
-      nuevoUsuario = true;
-
-      // Asociar usuario al grupo familiar
-      await client.query(`
-        INSERT INTO usuario_grupo (
-          usuario_id,
-          grupo_familiar_id,
-          rol_en_grupo,
-          estado,
-          fecha_unio,
-          invitado_por,
-          permisos
-        ) VALUES ($1, $2, $3, 'activo', NOW(), $4, $5)
-      `, [
-        usuario.id,
-        codigoData.grupo_familiar_id,
-        codigoData.rol_asignado || 'familiar',
-        codigoData.creado_por,
-        codigoData.permisos || '{"ver_medicamentos": true, "ver_calendario": true}'
-      ]);
+      usuarioId = insertUser.rows[0].id;
     }
 
-    // Incrementar contador de usos del código
+    // 4. Asociar usuario al grupo familiar (usuario_grupo)
     await client.query(`
-      UPDATE codigos_personalizados 
-      SET usos_actuales = usos_actuales + 1,
-          actualizado_en = NOW()
-      WHERE id = $1
-    `, [codigoData.id]);
+      INSERT INTO usuario_grupo (usuario_id, grupo_familiar_id, rol_en_grupo, estado, fecha_unio)
+      VALUES ($1, $2, $3, 'activo', NOW())
+      ON CONFLICT (usuario_id, grupo_familiar_id) 
+      DO UPDATE SET estado = 'activo', rol_en_grupo = EXCLUDED.rol_en_grupo
+    `, [usuarioId, grupo_familiar_id, rol_asignado === 'familiar_admin' ? 'admin' : 'familiar']);
 
-    // Si alcanzó el máximo de usos, desactivarlo
-    if (codigoData.max_usos && codigoData.usos_actuales + 1 >= codigoData.max_usos) {
-      await client.query(`
-        UPDATE codigos_personalizados 
-        SET activo = false,
-            actualizado_en = NOW()
-        WHERE id = $1
-      `, [codigoData.id]);
+    // 5. Asociar usuario al adulto mayor (familiares)
+    if (adulto_mayor_id) {
+      const familiarCheck = await client.query(
+        'SELECT id FROM familiares WHERE usuario_id = $1 AND adulto_mayor_id = $2',
+        [usuarioId, adulto_mayor_id]
+      );
+      if (familiarCheck.rows.length === 0) {
+        await client.query(`
+          INSERT INTO familiares (usuario_id, adulto_mayor_id, es_principal, rol_familiar, parentesco, creado_en)
+          VALUES ($1, $2, $3, $4, $5, NOW())
+        `, [usuarioId, adulto_mayor_id, false, rol_asignado, parentesco]);
+      }
+    } else {
+      console.warn('⚠️ No se encontró adulto_mayor_id para el grupo. El usuario no tendrá adulto mayor asociado.');
     }
 
-    // Preparar datos del usuario para respuesta
-    const usuarioRespuesta = {
-      id: usuario.id,
-      nombre: usuario.nombre,
-      email: usuario.email,
-      rol: usuario.rol,
-      necesita_completar_perfil: usuario.necesita_completar_perfil,
-      estado: usuario.estado,
-      grupo_familiar: {
-        id: codigoData.grupo_familiar_id,
-        codigo: codigoData.codigo_familiar,
-        nombre: codigoData.nombre_grupo,
-        admin_nombre: codigoData.admin_nombre,
-        admin_email: codigoData.admin_email
-      },
-      codigo_personalizado: {
-        id: codigoData.id,
-        codigo: codigoData.codigo,
-        nombre: codigoData.nombre,
-        apellido: codigoData.apellido,
-        rol_asignado: codigoData.rol_asignado,
-        parentesco: codigoData.parentesco
-      },
-      perfil_completo: !usuario.necesita_completar_perfil,
-      creado_en: usuario.creado_en
-    };
+    // 6. Actualizar usos del código personalizado
+    await client.query(`
+      UPDATE codigos_personalizados
+      SET usos_actuales = usos_actuales + 1, actualizado_en = NOW()
+      WHERE id = $1
+    `, [codigo.id]);
 
-    // Generar token (más corto para completar perfil)
+    // 7. Generar token JWT
     const token = jwt.sign(
       {
-        id: usuario.id,
-        rol: usuario.rol,
-        necesita_completar_perfil: usuario.necesita_completar_perfil,
-        grupo_familiar_id: codigoData.grupo_familiar_id,
-        codigo_personalizado_id: codigoData.id
+        id: usuarioId,
+        email: email || null,
+        nombre: nombre,
+        rol: rol_asignado || 'familiar',
+        grupo_familiar_id: grupo_familiar_id,
+        necesita_completar_perfil: false
       },
       JWT_SECRETO,
-      { expiresIn: '24h' } // Token más corto para usuarios temporales
+      { expiresIn: JWT_EXPIRES_IN }
     );
 
-    // Actualizar último acceso
-    await client.query(
-      'UPDATE usuarios SET ultimo_acceso = NOW() WHERE id = $1',
-      [usuario.id]
-    );
+    // 8. Obtener datos del usuario completo
+    const userDataResult = await client.query(`
+      SELECT id, nombre, apellido, email, rol, estado, telefono, fecha_nacimiento, genero, parentesco
+      FROM usuarios 
+      WHERE id = $1
+    `, [usuarioId]);
 
-    console.log(`✅ Login con código personalizado exitoso: ${nuevoUsuario ? 'Nuevo' : 'Existente'} usuario`);
+    const usuario = userDataResult.rows[0];
 
     return {
       exito: true,
-      usuario: usuarioRespuesta,
-      token: token,
-      nuevo_usuario: nuevoUsuario,
-      mensaje: nuevoUsuario
-        ? 'Cuenta temporal creada. Por favor completa tu perfil.'
-        : 'Inicio de sesión exitoso con código personalizado'
+      token,
+      usuario,
+      mensaje: 'Inicio de sesión con código personalizado exitoso'
     };
 
   } catch (error) {
     console.error('❌ Error en iniciarSesionConCodigoPersonalizado:', error.message);
-
     return {
       exito: false,
-      error: 'Error al iniciar sesión con código personalizado',
-      codigo: 'ERROR_CODIGO_PERSONALIZADO'
+      error: 'Error interno del servidor',
+      codigo: 'ERROR_SERVIDOR'
     };
   } finally {
-    if (client) {
-      client.release();
-    }
+    if (client) client.release();
   }
 };
 
@@ -607,12 +493,11 @@ export const completarPerfilConCodigo = async (usuarioId, datosPerfil) => {
 
     client = await pool.connect();
 
-    // Verificar que el usuario existe y necesita completar perfil
+    // Verificar que el usuario existe
     const usuarioQuery = `
-      SELECT id, necesita_completar_perfil, codigo_personalizado_id
+      SELECT id, necesita_completar_perfil
       FROM usuarios 
       WHERE id = $1 
-        AND necesita_completar_perfil = true
         AND estado = 'activo'
     `;
 
@@ -621,26 +506,9 @@ export const completarPerfilConCodigo = async (usuarioId, datosPerfil) => {
     if (usuarioResult.rows.length === 0) {
       return {
         exito: false,
-        error: 'Usuario no encontrado o no necesita completar perfil',
+        error: 'Usuario no encontrado o inactivo',
         codigo: 'USUARIO_NO_VALIDO'
       };
-    }
-
-    const usuarioActual = usuarioResult.rows[0];
-
-    // Si tiene código personalizado, obtener sus datos
-    let datosCodigo = null;
-    if (usuarioActual.codigo_personalizado_id) {
-      const codigoQuery = `
-        SELECT nombre, apellido, parentesco, rol_asignado
-        FROM codigos_personalizados
-        WHERE id = $1
-      `;
-
-      const codigoResult = await client.query(codigoQuery, [usuarioActual.codigo_personalizado_id]);
-      if (codigoResult.rows.length > 0) {
-        datosCodigo = codigoResult.rows[0];
-      }
     }
 
     // Verificar email si se proporciona
@@ -665,12 +533,9 @@ export const completarPerfilConCodigo = async (usuarioId, datosPerfil) => {
     const partesQuery = [];
     let contador = 1;
 
-    // Usar nombre del código personalizado si no se proporciona uno nuevo
-    const nombreFinal = nombre || (datosCodigo ? `${datosCodigo.nombre} ${datosCodigo.apellido}`.trim() : null);
-
-    if (nombreFinal) {
+    if (nombre) {
       partesQuery.push(`nombre = $${contador}`);
-      valores.push(nombreFinal);
+      valores.push(nombre.trim());
       contador++;
     }
 
@@ -710,19 +575,24 @@ export const completarPerfilConCodigo = async (usuarioId, datosPerfil) => {
       contador++;
     }
 
-    // Usar parentesco del código personalizado si no se proporciona uno nuevo
-    const parentescoFinal = parentesco || (datosCodigo ? datosCodigo.parentesco : null);
-    if (parentescoFinal) {
+    if (parentesco) {
       partesQuery.push(`parentesco = $${contador}`);
-      valores.push(parentescoFinal);
+      valores.push(parentesco);
       contador++;
     }
 
-    // Marcar como perfil completado
-    partesQuery.push(`necesita_completar_perfil = false`);
-    partesQuery.push(`actualizado_en = NOW()`);
+    // Marcar como perfil completado si se actualizó al menos un campo
+    if (partesQuery.length > 0) {
+      partesQuery.push(`necesita_completar_perfil = false`);
+      partesQuery.push(`actualizado_en = NOW()`);
+    } else {
+      return {
+        exito: false,
+        error: 'No se proporcionaron datos para actualizar',
+        codigo: 'SIN_DATOS'
+      };
+    }
 
-    // Agregar ID del usuario
     valores.push(usuarioId);
 
     const query = `
@@ -756,7 +626,6 @@ export const completarPerfilConCodigo = async (usuarioId, datosPerfil) => {
 
     const usuarioActualizado = result.rows[0];
 
-    // Generar nuevo token con perfil completo
     const token = jwt.sign(
       {
         id: usuarioActualizado.id,
@@ -786,16 +655,15 @@ export const completarPerfilConCodigo = async (usuarioId, datosPerfil) => {
       codigo: 'ERROR_SERVIDOR'
     };
   } finally {
-    if (client) {
-      client.release();
-    }
+    if (client) client.release();
   }
 };
 
 // ==================== FUNCIONES DE REGISTRO ====================
 
 /**
- * 5. Registrar nuevo usuario (para familias normales)
+ * 5. Registrar nuevo usuario (sin crear grupo automáticamente)
+ * ✅ CORREGIDA: NO crea grupo automáticamente. Solo si se proporciona codigo_familiar.
  */
 export const registrarUsuario = async (datosUsuario) => {
   let client;
@@ -810,7 +678,7 @@ export const registrarUsuario = async (datosUsuario) => {
       password,
       telefono,
       rol = 'familiar_secundario',
-      codigo_familiar // Opcional: para vincular con grupo al registrarse
+      codigo_familiar
     } = datosUsuario;
 
     // Validaciones
@@ -838,7 +706,6 @@ export const registrarUsuario = async (datosUsuario) => {
       };
     }
 
-    // Validar email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return {
@@ -848,7 +715,6 @@ export const registrarUsuario = async (datosUsuario) => {
       };
     }
 
-    // Validar contraseña
     if (password.length < 6) {
       return {
         exito: false,
@@ -857,7 +723,6 @@ export const registrarUsuario = async (datosUsuario) => {
       };
     }
 
-    // Procesar rol
     const rolesPermitidos = ['familiar_admin', 'familiar_secundario', 'familiar_principal', 'familiar', 'profesional', 'anciano'];
     let rolFinal = rol;
     if (rolFinal === 'familiar_principal' || rolFinal === 'familiar') {
@@ -933,14 +798,14 @@ export const registrarUsuario = async (datosUsuario) => {
       username ? username.trim() : null,
       passwordHash,
       telefono || null,
-      rolFinal   // ← IMPORTANTE: usar rolFinal aquí
+      rolFinal
     ]);
 
     const nuevoUsuario = result.rows[0];
-    let grupoId = null;  // ← DECLARAR grupoId AQUÍ
+    let grupoId = null;
     let grupoInfo = null;
 
-    // Si se proporcionó código familiar, vincular al grupo
+    // ✅ SOLO si se proporciona código familiar, unir al grupo
     if (codigo_familiar) {
       const codigoLimpio = codigo_familiar.replace(/-/g, '').toUpperCase();
 
@@ -950,7 +815,7 @@ export const registrarUsuario = async (datosUsuario) => {
       `, [codigoLimpio]);
 
       if (grupoResult.rows.length > 0) {
-        grupoId = grupoResult.rows[0].id;  // ← ASIGNAR grupoId
+        grupoId = grupoResult.rows[0].id;
 
         await client.query(`
           INSERT INTO usuario_grupo (
@@ -962,7 +827,6 @@ export const registrarUsuario = async (datosUsuario) => {
           ) VALUES ($1, $2, 'familiar', 'activo', NOW())
         `, [nuevoUsuario.id, grupoId]);
 
-        // Obtener info del grupo
         const grupoInfoQuery = await client.query(`
           SELECT gf.codigo_familiar, gf.nombre_grupo, ua.nombre as admin_nombre
           FROM grupos_familiares gf
@@ -974,63 +838,8 @@ export const registrarUsuario = async (datosUsuario) => {
           grupoInfo = grupoInfoQuery.rows[0];
         }
       }
-    } else {
-      // Si NO hay código familiar, CREAR GRUPO AUTOMÁTICAMENTE
-      const caracteres = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-      let codigoGrupo;
-      let codigoUnico = false;
-      let intentos = 0;
-
-      while (!codigoUnico && intentos < 10) {
-        codigoGrupo = '';
-        for (let i = 0; i < 6; i++) {
-          codigoGrupo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
-        }
-        const codigoCheck = await client.query(
-          'SELECT id FROM grupos_familiares WHERE codigo_familiar = $1',
-          [codigoGrupo]
-        );
-        if (codigoCheck.rows.length === 0) codigoUnico = true;
-        intentos++;
-      }
-
-      if (!codigoUnico) {
-        throw new Error('No se pudo generar código único para el grupo');
-      }
-
-      const fechaExpiracion = new Date();
-      fechaExpiracion.setDate(fechaExpiracion.getDate() + 30);
-
-      const insertGrupo = await client.query(`
-        INSERT INTO grupos_familiares (
-          codigo_familiar,
-          nombre_grupo,
-          usuario_admin_id,
-          fecha_expiracion,
-          activo,
-          max_integrantes
-        ) VALUES ($1, $2, $3, $4, true, 10)
-        RETURNING id, codigo_familiar, nombre_grupo
-      `, [codigoGrupo, `Familia ${nuevoUsuario.nombre}`, nuevoUsuario.id, fechaExpiracion]);
-
-      const grupoCreado = insertGrupo.rows[0];
-      grupoId = grupoCreado.id;  // ← ASIGNAR grupoId
-      grupoInfo = {
-        codigo_familiar: grupoCreado.codigo_familiar,
-        nombre_grupo: grupoCreado.nombre_grupo,
-        admin_nombre: nuevoUsuario.nombre
-      };
-
-      await client.query(`
-        INSERT INTO usuario_grupo (
-          usuario_id,
-          grupo_familiar_id,
-          rol_en_grupo,
-          estado,
-          fecha_unio
-        ) VALUES ($1, $2, 'admin', 'activo', NOW())
-      `, [nuevoUsuario.id, grupoId]);
     }
+    // ✅ Si NO hay código, NO se crea grupo automáticamente.
 
     // Generar token
     const token = jwt.sign(
@@ -1039,14 +848,13 @@ export const registrarUsuario = async (datosUsuario) => {
         email: nuevoUsuario.email,
         nombre: nuevoUsuario.nombre,
         rol: nuevoUsuario.rol,
-        grupo_familiar_id: grupoId,  // ← ahora grupoId está definido en ambos flujos
+        grupo_familiar_id: grupoId,
         necesita_completar_perfil: nuevoUsuario.necesita_completar_perfil
       },
       JWT_SECRETO,
       { expiresIn: JWT_EXPIRES_IN }
     );
 
-    // Preparar respuesta
     const respuesta = {
       exito: true,
       usuario: {
@@ -1078,9 +886,7 @@ export const registrarUsuario = async (datosUsuario) => {
       codigo: 'ERROR_SERVIDOR'
     };
   } finally {
-    if (client) {
-      client.release();
-    }
+    if (client) client.release();
   }
 };
 
@@ -1105,7 +911,6 @@ export const solicitarRecuperacionContrasena = async (email) => {
 
     client = await pool.connect();
 
-    // Verificar que el email existe
     const usuarioQuery = `
       SELECT id, nombre FROM usuarios 
       WHERE LOWER(email) = LOWER($1) AND estado = 'activo'
@@ -1122,11 +927,7 @@ export const solicitarRecuperacionContrasena = async (email) => {
     }
 
     const usuario = usuarioResult.rows[0];
-
-    // Generar código de 6 dígitos
     const codigo = Math.floor(1000 + Math.random() * 9000).toString();
-
-    // Guardar código en base de datos (con expiración de 15 minutos)
     const expiracion = new Date();
     expiracion.setMinutes(expiracion.getMinutes() + 15);
 
@@ -1149,7 +950,6 @@ export const solicitarRecuperacionContrasena = async (email) => {
 
     console.log(`📨 Código generado para ${usuario.nombre}: ${codigo}`);
 
-    // Después de guardar el código en BD:
     const emailEnviado = await enviarCodigoVerificacion(email, codigo, 'recuperacion');
 
     if (!emailEnviado.exito) {
@@ -1171,9 +971,7 @@ export const solicitarRecuperacionContrasena = async (email) => {
       codigo: 'ERROR_SERVIDOR'
     };
   } finally {
-    if (client) {
-      client.release();
-    }
+    if (client) client.release();
   }
 };
 
@@ -1229,9 +1027,7 @@ export const verificarCodigoRecuperacion = async (usuarioId, codigo) => {
       codigo: 'ERROR_SERVIDOR'
     };
   } finally {
-    if (client) {
-      client.release();
-    }
+    if (client) client.release();
   }
 };
 
@@ -1244,7 +1040,6 @@ export const restablecerContrasena = async (usuarioId, codigoId, nuevaContrasena
   try {
     console.log('🔑 [AUTH] Restableciendo contraseña para usuario:', usuarioId);
 
-    // Validar nueva contraseña
     if (!nuevaContrasena || nuevaContrasena.length < 6) {
       return {
         exito: false,
@@ -1255,7 +1050,6 @@ export const restablecerContrasena = async (usuarioId, codigoId, nuevaContrasena
 
     client = await pool.connect();
 
-    // Verificar que el código es válido
     const codigoQuery = `
       SELECT id FROM codigos_recuperacion
       WHERE id = $1 
@@ -1274,24 +1068,20 @@ export const restablecerContrasena = async (usuarioId, codigoId, nuevaContrasena
       };
     }
 
-    // Encriptar nueva contraseña
     const nuevaPasswordHash = crypto
       .createHash('sha256')
       .update(nuevaContrasena)
       .digest('hex')
       .toLowerCase();
 
-    // Iniciar transacción
     await client.query('BEGIN');
 
     try {
-      // Actualizar contraseña
       await client.query(
         'UPDATE usuarios SET password = $1, actualizado_en = NOW() WHERE id = $2',
         [nuevaPasswordHash, usuarioId]
       );
 
-      // Marcar código como utilizado
       await client.query(
         'UPDATE codigos_recuperacion SET utilizado = true WHERE id = $1',
         [codigoId]
@@ -1319,9 +1109,7 @@ export const restablecerContrasena = async (usuarioId, codigoId, nuevaContrasena
       codigo: 'ERROR_SERVIDOR'
     };
   } finally {
-    if (client) {
-      client.release();
-    }
+    if (client) client.release();
   }
 };
 
@@ -1340,7 +1128,6 @@ export const verificarToken = async (token) => {
 
     const decoded = jwt.verify(token, JWT_SECRETO);
 
-    // Verificar que el usuario aún existe
     const client = await pool.connect();
     try {
       const usuarioQuery = `
@@ -1429,8 +1216,6 @@ export const cerrarSesion = async (usuarioId) => {
   try {
     console.log('🚪 [AUTH] Cerrar sesión para usuario:', usuarioId);
 
-    // Aquí podrías invalidar tokens, registrar logout, etc.
-    // Por ahora, solo registro
     const client = await pool.connect();
     try {
       await client.query(
@@ -1465,7 +1250,6 @@ export const cambiarContrasena = async (usuarioId, contrasenaActual, nuevaContra
   try {
     console.log('🔑 [AUTH] Cambiar contraseña para usuario ID:', usuarioId);
 
-    // Validar nueva contraseña
     if (nuevaContrasena.length < 6) {
       return {
         exito: false,
@@ -1476,7 +1260,6 @@ export const cambiarContrasena = async (usuarioId, contrasenaActual, nuevaContra
 
     client = await pool.connect();
 
-    // Obtener usuario actual
     const query = 'SELECT password FROM usuarios WHERE id = $1 AND estado = $2';
     const result = await client.query(query, [usuarioId, 'activo']);
 
@@ -1491,21 +1274,16 @@ export const cambiarContrasena = async (usuarioId, contrasenaActual, nuevaContra
     const usuario = result.rows[0];
     const hashActual = usuario.password;
 
-    // Verificar contraseña actual
     let contrasenaActualValida = false;
 
     if (hashActual.startsWith('$2')) {
-      // Hash bcrypt
       contrasenaActualValida = await bcrypt.compare(contrasenaActual, hashActual);
-    }
-    else if (hashActual.length === 64 && /^[a-f0-9]{64}$/i.test(hashActual)) {
-      // Hash SHA256
+    } else if (hashActual.length === 64 && /^[a-f0-9]{64}$/i.test(hashActual)) {
       const hashCalculado = crypto
         .createHash('sha256')
         .update(contrasenaActual)
         .digest('hex')
         .toLowerCase();
-
       contrasenaActualValida = hashCalculado === hashActual.toLowerCase();
     }
 
@@ -1517,14 +1295,12 @@ export const cambiarContrasena = async (usuarioId, contrasenaActual, nuevaContra
       };
     }
 
-    // Hash de la nueva contraseña con SHA256
     const nuevaPasswordHash = crypto
       .createHash('sha256')
       .update(nuevaContrasena)
       .digest('hex')
       .toLowerCase();
 
-    // Actualizar en la base de datos
     await client.query(
       'UPDATE usuarios SET password = $1, actualizado_en = NOW() WHERE id = $2',
       [nuevaPasswordHash, usuarioId]
@@ -1545,9 +1321,7 @@ export const cambiarContrasena = async (usuarioId, contrasenaActual, nuevaContra
       codigo: 'ERROR_SERVIDOR'
     };
   } finally {
-    if (client) {
-      client.release();
-    }
+    if (client) client.release();
   }
 };
 
@@ -1566,7 +1340,6 @@ export const verificarDisponibilidadUsuario = async (email, username) => {
 
     const errores = {};
 
-    // Verificar email
     if (email) {
       const emailResult = await client.query(
         'SELECT id FROM usuarios WHERE LOWER(email) = LOWER($1) AND estado = $2',
@@ -1577,7 +1350,6 @@ export const verificarDisponibilidadUsuario = async (email, username) => {
       }
     }
 
-    // Verificar username
     if (username) {
       const usernameResult = await client.query(
         'SELECT id FROM usuarios WHERE LOWER(username) = LOWER($1) AND estado = $2',
@@ -1605,12 +1377,42 @@ export const verificarDisponibilidadUsuario = async (email, username) => {
       codigo: 'ERROR_SERVIDOR'
     };
   } finally {
-    if (client) {
-      client.release();
-    }
+    if (client) client.release();
   }
 };
 
+// ==================== FUNCIONES AUXILIARES PARA GRUPOS (NUEVAS) ====================
+
+/**
+ * 13. Obtener grupo familiar por código (para uso interno)
+ */
+export const obtenerGrupoPorCodigo = async (codigoFamiliar) => {
+  let client;
+  try {
+    client = await pool.connect();
+    const codigoLimpio = codigoFamiliar.replace(/-/g, '').toUpperCase();
+
+    const result = await client.query(`
+      SELECT id, codigo_familiar, nombre_grupo, fecha_expiracion, activo, max_integrantes
+      FROM grupos_familiares
+      WHERE codigo_familiar = $1 AND activo = true AND fecha_expiracion > NOW()
+    `, [codigoLimpio]);
+
+    return {
+      exito: true,
+      grupo: result.rows[0] || null
+    };
+  } catch (error) {
+    console.error('❌ Error en obtenerGrupoPorCodigo:', error.message);
+    return {
+      exito: false,
+      error: 'Error al obtener grupo por código',
+      codigo: 'ERROR_SERVIDOR'
+    };
+  } finally {
+    if (client) client.release();
+  }
+};
 
 // ==================== EXPORTACIÓN ====================
 
@@ -1631,5 +1433,8 @@ export default {
   verificarToken,
   cerrarSesion,
   cambiarContrasena,
-  verificarDisponibilidadUsuario
+  verificarDisponibilidadUsuario,
+
+  // Funciones auxiliares
+  obtenerGrupoPorCodigo
 };
