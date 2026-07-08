@@ -118,16 +118,45 @@ const obtenerTokenDeRequest = (req) => {
   return token;
 };
 
+/**
+ * Función auxiliar: Verificar y decodificar token JWT
+ */
+const verificarYDecodificarToken = async (token) => {
+  try {
+    if (!JWT_SECRETO) {
+      console.error('❌ JWT_SECRETO no configurado en variables de entorno');
+      return null;
+    }
 
-// Función mejorada para obtener usuario (sin campos sensibles)
+    const decoded = jwt.verify(token, JWT_SECRETO);
+
+    // Verificar estructura mínima
+    if (!decoded.id) {
+      console.error('❌ Token no contiene ID de usuario');
+      return null;
+    }
+
+    return {
+      id: decoded.id,
+      email: decoded.email || null,
+      nombre: decoded.nombre || null,
+      rol: decoded.rol || 'usuario'
+    };
+
+  } catch (error) {
+    console.error('❌ Error verificando token:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * Función auxiliar: Obtener información completa del usuario desde BD
+ */
 const obtenerInformacionUsuarioBD = async (usuarioId) => {
   try {
     const query = `
       SELECT 
-        u.id, u.nombre, u.apellido, u.email, u.telefono,
-        u.rol, u.estado, u.necesita_completar_perfil,
-        u.imagen_perfil, u.notificaciones_email, u.notificaciones_push,
-        u.creado_en, u.actualizado_en, u.ultimo_acceso,
+        u.*,  -- Selecciona todas las columnas de usuarios
         ug.grupo_familiar_id,
         ug.rol_en_grupo,
         gf.codigo_familiar,
@@ -139,38 +168,19 @@ const obtenerInformacionUsuarioBD = async (usuarioId) => {
       WHERE u.id = $1 AND u.estado = 'activo'
       LIMIT 1
     `;
+
     const result = await pool.query(query, [usuarioId]);
-    return result.rows[0] || null;
+
+    if (result.rows.length === 0) {
+      console.log('❌ Usuario no encontrado o inactivo en BD');
+      return null;
+    }
+
+    return result.rows[0];
+
   } catch (error) {
     console.error('❌ Error obteniendo usuario de BD:', error.message);
     return null;
-  }
-};
-
-// Función mejorada para actualizar último acceso (sin bloquear)
-export const actualizarUltimoAcceso = async (req, res, next) => {
-  if (req.usuario?.id) {
-    pool.query('UPDATE usuarios SET ultimo_acceso = NOW() WHERE id = $1', [req.usuario.id])
-      .catch(err => console.error('❌ Error actualizando último acceso:', err.message));
-  }
-  next();
-};
-
-// Función mejorada para verificar token con opciones
-const verificarYDecodificarToken = async (token) => {
-  try {
-    const decoded = jwt.verify(token, JWT_SECRETO, {
-      // Opcional: issuer: 'cuidame-api',
-      // audience: 'cuidame-app'
-    });
-    if (!decoded.id) {
-      console.error('❌ Token no contiene ID de usuario');
-      return null;
-    }
-    return decoded;
-  } catch (error) {
-    console.error('❌ Error verificando token:', error.message);
-    throw error;
   }
 };
 
@@ -375,7 +385,33 @@ export const logAutenticado = (req, res, next) => {
   next();
 };
 
+/**
+ * Middleware para actualizar último acceso
+ * Uso: router.use(actualizarUltimoAcceso)
+ */
+export const actualizarUltimoAcceso = async (req, res, next) => {
+  try {
+    if (req.usuario && req.usuario.id) {
+      // Actualizar último acceso de forma asíncrona (no bloquear la respuesta)
+      setTimeout(async () => {
+        try {
+          await pool.query(
+            'UPDATE usuarios SET ultimo_acceso = NOW() WHERE id = $1',
+            [req.usuario.id]
+          );
+          console.log(`🕒 Último acceso actualizado para usuario: ${req.usuario.id}`);
+        } catch (error) {
+          console.error('❌ Error actualizando último acceso:', error.message);
+        }
+      }, 0);
+    }
+  } catch (error) {
+    // No bloquear la request si hay error
+    console.error('❌ Error en middleware de último acceso:', error.message);
+  }
 
+  next();
+};
 
 /**
  * Middleware para CORS específico para usuarios autenticados
