@@ -533,16 +533,16 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
 
       // Notificar a todos los familiares (excepto al creador)
       const mensaje = `Nuevo evento "${titulo}" programado para ${fecha_inicio}`;
+      // ✅ Notificación de nuevo familiar
       await notificarAFamiliares(
-        adulto_mayor_id,
-        'evento_nuevo',
-        mensaje,
-        eventoId,
-        'eventos',
-        usuario_id,
-        usuario_id
+        grupoId, // o adulto_mayor_id si existe
+        'familiar_nuevo',
+        `Se ha agregado un nuevo familiar: ${nombre} ${apellido || ''}`,
+        usuarioId,
+        'familiares',
+        adminId,
+        adminId
       );
-
       const usuarioResult = await client.query(insertUsuarioQuery, [
         nombre,
         apellido || null,
