@@ -8,6 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { autenticarUsuario } from './middleware/autenticacionMiddleware.js';
 import { enviarCodigo } from './controladores/emailControlador.js';
+import notificacionesRutas from './rutas/notificacionesRutas.js';
 
 
 
@@ -348,6 +349,10 @@ console.log('\n🔧 MONTANDO RUTAS DE LA API...');
 // Autenticación
 app.use('/api/auth', rutasAutenticacion);
 console.log('✅ Rutas montadas en /api/auth');
+
+app.use('/api/notificaciones', notificacionesRutas);
+console.log('✅ Rutas montadas en /api/notificaciones');
+
 
 // Información del adulto mayor
 app.use('/api/info-adulto', rutasInfoAnciano);

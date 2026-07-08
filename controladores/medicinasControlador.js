@@ -1,5 +1,6 @@
 // controladores/medicinasControlador.js - Controlador de Gestión de Medicinas
 import { pool } from '../configuracion/basedeDatos.js';
+import { crearNotificacion } from './notificacionesControlador.js';
 
 // ==================== FUNCIONES PRINCIPALES ====================
 
@@ -1121,6 +1122,19 @@ export const actualizarStockMedicina = async (medicinaId, usuarioId, nuevoStock)
     const result = await client.query(updateQuery, [nuevoStock, medicinaId]);
 
     const medicinaActualizada = result.rows[0];
+
+
+    // Notificar a todos los familiares (excepto al que hizo la acción)
+    const mensaje = `El stock de "${nombre}" ha cambiado a ${nuevoStock}`;
+    await notificarAFamiliares(
+      adulto_mayor_id,
+      'medicina_stock',
+      mensaje,
+      medicinaId,
+      'medicinas',
+      usuario_id,
+      usuario_id // excluye al emisor
+    );
 
     // Registrar movimiento de stock
     await registrarMovimientoStock({
