@@ -54,12 +54,15 @@ export const obtenerTodasMedicinas = async (usuarioId) => {
         m.activa,
         m.creado_en,
         m.actualizado_en,
-        -- Verificar si se tomó hoy
-        EXISTS(
-          SELECT 1 FROM registros_medicina rm 
-          WHERE rm.medicina_id = m.id 
-            AND rm.fecha_toma = CURRENT_DATE
-            AND rm.completada = true
+        COALESCE(
+          (
+            SELECT jsonb_agg(rm.horario)
+            FROM registros_medicina rm
+            WHERE rm.medicina_id = m.id 
+              AND rm.fecha_toma = CURRENT_DATE
+              AND rm.completada = true
+          ),
+          '[]'::jsonb
         ) as tomada_hoy
       FROM medicinas m
       WHERE m.adulto_mayor_id = $1
@@ -717,19 +720,21 @@ export const marcarMedicinaTomada = async (medicinaId, usuarioId, datos) => {
       const insertQuery = `
         INSERT INTO registros_medicina (
           medicina_id,
+          usuario_id,
           usuario_registro_id,
           adulto_mayor_id,
           fecha_toma,
           horario,
           completada,
           observaciones
-        ) VALUES ($1, $2, $3, $4, $5, true, $6)
+        ) VALUES ($1, $2, $3, $4, $5, $6, true, $7)
         RETURNING *
       `;
 
       const insertResult = await client.query(insertQuery, [
         medicinaId,
-        usuarioId,
+        usuarioId,                 // ✅ AGREGADO: usuario_id
+        usuarioId,                 // usuario_registro_id (puede ser el mismo)
         adultoId,
         fechaToma,
         horario,
@@ -737,6 +742,7 @@ export const marcarMedicinaTomada = async (medicinaId, usuarioId, datos) => {
       ]);
 
       resultado = insertResult.rows[0];
+
     }
 
     // Reducir stock si es necesario
@@ -1504,6 +1510,12 @@ const registrarMovimientoStock = async (movimiento) => {
 /**
  * Eliminar una toma específica de medicina (deshacer toma)
  */
+/**
+ * Eliminar una toma de medicina específica (deshacer toma)
+ */
+/**
+ * Eliminar una toma de medicina específica (deshacer toma)
+ */
 const eliminarTomaMedicina = async (usuarioId, medicinaId, horario) => {
   let client;
   try {
@@ -1511,31 +1523,36 @@ const eliminarTomaMedicina = async (usuarioId, medicinaId, horario) => {
 
     client = await pool.connect();
 
-    // Verificar que la medicina existe y pertenece al usuario
+    // Verificar que la medicina existe y pertenece al adulto mayor del usuario
     const verifyQuery = `
-      SELECT id, adulto_mayor_id FROM medicinas 
-      WHERE id = $1 AND usuario_id = $2
+      SELECT m.id, m.adulto_mayor_id, m.nombre
+      FROM medicinas m
+      INNER JOIN adultos_mayores am ON m.adulto_mayor_id = am.id
+      INNER JOIN familiares f ON am.id = f.adulto_mayor_id
+      WHERE m.id = $1 AND f.usuario_id = $2
     `;
     const verifyResult = await client.query(verifyQuery, [medicinaId, usuarioId]);
     if (verifyResult.rows.length === 0) {
-      return { exito: false, error: 'Medicina no encontrada' };
+      return { exito: false, error: 'Medicina no encontrada o no tienes acceso' };
     }
 
     const adulto_mayor_id = verifyResult.rows[0].adulto_mayor_id;
 
-    // Eliminar el registro de toma para ese día y horario
+    // Eliminar el registro de toma para ese día, horario y usuario
     const deleteQuery = `
-      DELETE FROM tomas_medicinas 
+      DELETE FROM registros_medicina 
       WHERE medicina_id = $1 
-        AND fecha = $2 
+        AND fecha_toma = $2 
         AND horario = $3
-        AND adulto_mayor_id = $4
+        AND usuario_id = $4
+        AND adulto_mayor_id = $5
       RETURNING id
     `;
     const deleteResult = await client.query(deleteQuery, [
       medicinaId,
       hoy,
       horario,
+      usuarioId,
       adulto_mayor_id
     ]);
 
@@ -1543,9 +1560,9 @@ const eliminarTomaMedicina = async (usuarioId, medicinaId, horario) => {
       return { exito: false, error: 'No se encontró la toma para eliminar' };
     }
 
-    // Opcional: actualizar stock (sumar 1)
+    // Aumentar el stock en 1 (opcional)
     await client.query(
-      `UPDATE medicinas SET stock = stock + 1 WHERE id = $1`,
+      `UPDATE medicinas SET stock_actual = stock_actual + 1 WHERE id = $1`,
       [medicinaId]
     );
 
@@ -1557,7 +1574,6 @@ const eliminarTomaMedicina = async (usuarioId, medicinaId, horario) => {
     if (client) client.release();
   }
 };
-
 // ==================== EXPORTACIÓN ====================
 
 export default {
