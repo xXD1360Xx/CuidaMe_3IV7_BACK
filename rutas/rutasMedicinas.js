@@ -502,4 +502,41 @@ router.post('/sincronizar', autenticarUsuario, async (req, res) => {
   }
 });
 
+
+/**
+ * Eliminar una toma de medicina (deshacer)
+ * DELETE /api/medicinas/eliminar-toma
+ */
+/**
+ * Eliminar una toma de medicina (deshacer)
+ * DELETE /api/medicinas/eliminar-toma
+ */
+router.delete('/eliminar-toma', autenticarUsuario, async (req, res) => {
+  try {
+    const { usuario_id, medicina_id, horario } = req.body;
+
+    if (!usuario_id || !medicina_id || !horario) {
+      return res.status(400).json({
+        exito: false,
+        error: 'Faltan datos: usuario_id, medicina_id y horario son requeridos'
+      });
+    }
+
+    const resultado = await medicinasControlador.eliminarTomaMedicina(
+      usuario_id,
+      medicina_id,
+      horario
+    );
+
+    if (!resultado.exito) {
+      return res.status(400).json(resultado);
+    }
+
+    res.status(200).json(resultado);
+  } catch (error) {
+    console.error('Error en ruta eliminar-toma:', error);
+    res.status(500).json({ exito: false, error: 'Error interno del servidor' });
+  }
+});
+
 export default router;

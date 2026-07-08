@@ -1497,6 +1497,67 @@ const registrarMovimientoStock = async (movimiento) => {
   }
 };
 
+
+/**
+ * Eliminar una toma de medicina específica (deshacer toma)
+ */
+/**
+ * Eliminar una toma específica de medicina (deshacer toma)
+ */
+const eliminarTomaMedicina = async (usuarioId, medicinaId, horario) => {
+  let client;
+  try {
+    const hoy = new Date().toISOString().split('T')[0];
+
+    client = await pool.connect();
+
+    // Verificar que la medicina existe y pertenece al usuario
+    const verifyQuery = `
+      SELECT id, adulto_mayor_id FROM medicinas 
+      WHERE id = $1 AND usuario_id = $2
+    `;
+    const verifyResult = await client.query(verifyQuery, [medicinaId, usuarioId]);
+    if (verifyResult.rows.length === 0) {
+      return { exito: false, error: 'Medicina no encontrada' };
+    }
+
+    const adulto_mayor_id = verifyResult.rows[0].adulto_mayor_id;
+
+    // Eliminar el registro de toma para ese día y horario
+    const deleteQuery = `
+      DELETE FROM tomas_medicinas 
+      WHERE medicina_id = $1 
+        AND fecha = $2 
+        AND horario = $3
+        AND adulto_mayor_id = $4
+      RETURNING id
+    `;
+    const deleteResult = await client.query(deleteQuery, [
+      medicinaId,
+      hoy,
+      horario,
+      adulto_mayor_id
+    ]);
+
+    if (deleteResult.rowCount === 0) {
+      return { exito: false, error: 'No se encontró la toma para eliminar' };
+    }
+
+    // Opcional: actualizar stock (sumar 1)
+    await client.query(
+      `UPDATE medicinas SET stock = stock + 1 WHERE id = $1`,
+      [medicinaId]
+    );
+
+    return { exito: true, mensaje: 'Toma eliminada correctamente' };
+  } catch (error) {
+    console.error('Error eliminando toma:', error);
+    return { exito: false, error: error.message };
+  } finally {
+    if (client) client.release();
+  }
+};
+
 // ==================== EXPORTACIÓN ====================
 
 export default {
@@ -1515,6 +1576,7 @@ export default {
 
   // Registros y seguimiento
   marcarMedicinaTomada,
+  eliminarTomaMedicina,
   obtenerRegistrosMedicina,
 
   // Gestión de stock

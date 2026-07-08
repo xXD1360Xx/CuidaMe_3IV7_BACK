@@ -1635,6 +1635,7 @@ export const obtenerOcurrenciasPorRango = async (usuarioId, fechaInicio, fechaFi
 const obtenerOCrearPredefinidas = async (adulto_mayor_id, usuarioId) => {
   // Lista de actividades predefinidas con sus colores y emojis
   const predefinidas = [
+    // Originales (8)
     { nombre: 'Bañarse', color: '#1abc9c', emoji: '🚿', tipo: 'cuidado_personal' },
     { nombre: 'Comer', color: '#e67e22', emoji: '🍽️', tipo: 'alimentacion' },
     { nombre: 'Tomar Medicina', color: '#2ecc71', emoji: '💊', tipo: 'salud' },
@@ -1643,6 +1644,27 @@ const obtenerOCrearPredefinidas = async (adulto_mayor_id, usuarioId) => {
     { nombre: 'Lectura', color: '#34495e', emoji: '📚', tipo: 'recreacion' },
     { nombre: 'Ejercicios', color: '#e74c3c', emoji: '💪', tipo: 'ejercicio' },
     { nombre: 'Socializar', color: '#f39c12', emoji: '👪', tipo: 'social' },
+    // Nuevas (20)
+    { nombre: 'Desayunar', color: '#F39C12', emoji: '🍳', tipo: 'alimentacion' },
+    { nombre: 'Almorzar', color: '#E67E22', emoji: '🥘', tipo: 'alimentacion' },
+    { nombre: 'Cenar', color: '#D35400', emoji: '🍲', tipo: 'alimentacion' },
+    { nombre: 'Merendar', color: '#F1C40F', emoji: '🍪', tipo: 'alimentacion' },
+    { nombre: 'Tomar agua', color: '#3498DB', emoji: '💧', tipo: 'salud' },
+    { nombre: 'Meditar', color: '#9B59B6', emoji: '🧘', tipo: 'bienestar' },
+    { nombre: 'Estiramientos', color: '#2ECC71', emoji: '🤸', tipo: 'ejercicio' },
+    { nombre: 'Escribir', color: '#5D4E37', emoji: '✍️', tipo: 'recreacion' },
+    { nombre: 'Pintar', color: '#E91E63', emoji: '🎨', tipo: 'recreacion' },
+    { nombre: 'Jardinería', color: '#27AE60', emoji: '🌱', tipo: 'recreacion' },
+    { nombre: 'Música', color: '#8E44AD', emoji: '🎵', tipo: 'recreacion' },
+    { nombre: 'Jugar cartas', color: '#1ABC9C', emoji: '🃏', tipo: 'social' },
+    { nombre: 'Llamada familiar', color: '#2C3E50', emoji: '📞', tipo: 'social' },
+    { nombre: 'Pasear', color: '#16A085', emoji: '🚶‍♀️', tipo: 'ejercicio' },
+    { nombre: 'Dormir siesta', color: '#5D6D7E', emoji: '😴', tipo: 'descanso' },
+    { nombre: 'Leer', color: '#2980B9', emoji: '📖', tipo: 'recreacion' },
+    { nombre: 'Tejer', color: '#8E44AD', emoji: '🧶', tipo: 'recreacion' },
+    { nombre: 'Cocinar', color: '#F39C12', emoji: '👨‍🍳', tipo: 'recreacion' },
+    { nombre: 'Manualidades', color: '#2ECC71', emoji: '🧩', tipo: 'recreacion' },
+    { nombre: 'Fotos familiares', color: '#E67E22', emoji: '📸', tipo: 'social' },
   ];
 
   const creadas = [];
