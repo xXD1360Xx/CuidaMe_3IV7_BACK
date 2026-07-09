@@ -532,10 +532,8 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
       `;
 
       // Notificar a todos los familiares (excepto al creador)
-      const mensaje = `Nuevo evento "${titulo}" programado para ${fecha_inicio}`;
-      // ✅ Notificación de nuevo familiar
       await notificarAFamiliares(
-        grupoId, // o adulto_mayor_id si existe
+        grupoId,
         'familiar_nuevo',
         `Se ha agregado un nuevo familiar: ${nombre} ${apellido || ''}`,
         usuarioId,
@@ -1354,6 +1352,189 @@ export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
     if (client) {
       client.release();
     }
+  }
+};
+
+
+/**
+ * Eliminar grupo familiar y todos sus datos asociados (soft delete en cascada)
+ */
+export const eliminarGrupoFamiliar = async (usuarioId) => {
+  let client;
+  try {
+    console.log(`🗑️ [FAMILIA] Eliminando grupo familiar por usuario: ${usuarioId}`);
+    client = await pool.connect();
+
+    // 1. Verificar que el usuario es administrador del grupo
+    const adminCheck = await client.query(`
+      SELECT gf.id, gf.nombre_grupo
+      FROM usuario_grupo ug
+      JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
+      WHERE ug.usuario_id = $1 AND ug.rol_en_grupo = 'admin' AND gf.activo = true
+    `, [usuarioId]);
+
+    if (adminCheck.rows.length === 0) {
+      return {
+        exito: false,
+        error: 'No eres administrador o no hay un grupo activo',
+        codigo: 'NO_ADMIN_O_GRUPO_INACTIVO'
+      };
+    }
+
+    const grupoId = adminCheck.rows[0].id;
+    const nombreGrupo = adminCheck.rows[0].nombre_grupo;
+
+    // 2. Obtener el adulto_mayor_id asociado al grupo (si existe)
+    const adultoResult = await client.query(`
+      SELECT id FROM adultos_mayores WHERE grupo_familiar_id = $1
+    `, [grupoId]);
+    const adultoMayorId = adultoResult.rows.length > 0 ? adultoResult.rows[0].id : null;
+
+    // Iniciar transacción para asegurar integridad
+    await client.query('BEGIN');
+
+    try {
+      // 3. Desactivar registros relacionados con el adulto mayor (si existe)
+      if (adultoMayorId) {
+        // Enfermedades
+        await client.query(`
+          UPDATE enfermedades_adulto SET activa = false, actualizado_en = NOW()
+          WHERE adulto_mayor_id = $1
+        `, [adultoMayorId]);
+
+        // Alergias
+        await client.query(`
+          UPDATE alergias_adulto SET activa = false, actualizado_en = NOW()
+          WHERE adulto_mayor_id = $1
+        `, [adultoMayorId]);
+
+        // Artículos
+        await client.query(`
+          UPDATE articulos_adulto SET activo = false, actualizado_en = NOW()
+          WHERE adulto_mayor_id = $1
+        `, [adultoMayorId]);
+
+        // Hobbies
+        await client.query(`
+          UPDATE hobbies_adulto SET activo = false, actualizado_en = NOW()
+          WHERE adulto_mayor_id = $1
+        `, [adultoMayorId]);
+
+        // Citas rutinarias
+        await client.query(`
+          UPDATE citas_rutinarias SET activa = false, actualizado_en = NOW()
+          WHERE adulto_mayor_id = $1
+        `, [adultoMayorId]);
+
+        // Medicinas (habituales)
+        await client.query(`
+          UPDATE medicinas SET activa = false, actualizado_en = NOW()
+          WHERE adulto_mayor_id = $1
+        `, [adultoMayorId]);
+
+        // Mediciones de salud (si existen)
+        await client.query(`
+          UPDATE mediciones_salud SET activa = false, actualizado_en = NOW()
+          WHERE adulto_mayor_id = $1
+        `, [adultoMayorId]);
+
+        // Eventos del calendario (si tienen adulto_mayor_id)
+        await client.query(`
+          UPDATE eventos_calendario SET activo = false, actualizado_en = NOW()
+          WHERE adulto_mayor_id = $1
+        `, [adultoMayorId]);
+
+        // Gastos (futuros, pasados, todos)
+        await client.query(`
+          UPDATE gastos SET deleted_at = NOW()
+          WHERE adulto_mayor_id = $1
+        `, [adultoMayorId]);
+
+        // Aportes a gastos (relacionados con los gastos del adulto)
+        await client.query(`
+          UPDATE aportes_gastos SET deleted_at = NOW()
+          WHERE gasto_id IN (SELECT id FROM gastos WHERE adulto_mayor_id = $1)
+        `, [adultoMayorId]);
+
+        // Actividades del horario (ocurrencias) - si tienen adulto_mayor_id o grupo_id
+        await client.query(`
+          UPDATE actividades_ocurrencias SET activa = false, actualizado_en = NOW()
+          WHERE adulto_mayor_id = $1
+        `, [adultoMayorId]);
+
+        // Actividades base (hobbies, rutinas) - si están asociadas al adulto mayor
+        await client.query(`
+          UPDATE actividades_base SET activa = false, actualizado_en = NOW()
+          WHERE adulto_mayor_id = $1
+        `, [adultoMayorId]);
+
+        // Desactivar el adulto mayor
+        await client.query(`
+          UPDATE adultos_mayores SET activo = false, actualizado_en = NOW()
+          WHERE id = $1
+        `, [adultoMayorId]);
+      }
+
+      // 4. Desactivar códigos personalizados del grupo
+      await client.query(`
+        UPDATE codigos_personalizados SET activo = false, actualizado_en = NOW()
+        WHERE grupo_familiar_id = $1
+      `, [grupoId]);
+
+      // 5. Desactivar miembros del grupo (usuario_grupo)
+      await client.query(`
+        UPDATE usuario_grupo SET estado = 'inactivo', actualizado_en = NOW()
+        WHERE grupo_familiar_id = $1
+      `, [grupoId]);
+
+      // 6. Desactivar distribuciones de gastos (porcentajes)
+      await client.query(`
+        UPDATE distribuciones_gastos SET activo = false, actualizado_en = NOW()
+        WHERE adulto_mayor_id = $1
+      `, [adultoMayorId]);
+
+      // 7. Desactivar notificaciones relacionadas (opcional, si tienen grupo_id o adulto_id)
+      // Nota: las notificaciones suelen tener usuario_id, no grupo_id, pero podemos desactivar las del grupo
+      // si tenemos un campo grupo_id, o simplemente dejarlas activas porque no molestan.
+      // Si quieres desactivar todas las notificaciones de los usuarios del grupo:
+      await client.query(`
+        UPDATE notificaciones SET leida = true
+        WHERE usuario_id IN (SELECT usuario_id FROM usuario_grupo WHERE grupo_familiar_id = $1)
+      `, [grupoId]);
+
+      // 8. Desactivar el grupo familiar
+      await client.query(`
+        UPDATE grupos_familiares SET activo = false, actualizado_en = NOW()
+        WHERE id = $1
+      `, [grupoId]);
+
+      // Commit de la transacción
+      await client.query('COMMIT');
+
+      console.log(`✅ Grupo familiar "${nombreGrupo}" (ID: ${grupoId}) eliminado con todos sus datos asociados.`);
+
+      return {
+        exito: true,
+        mensaje: `Grupo familiar "${nombreGrupo}" y todos sus datos asociados han sido eliminados.`,
+        grupo_id: grupoId,
+        adulto_mayor_id: adultoMayorId
+      };
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('❌ Error en transacción de eliminación:', error.message);
+      throw error;
+    }
+
+  } catch (error) {
+    console.error('❌ Error en eliminarGrupoFamiliar:', error.message);
+    return {
+      exito: false,
+      error: 'Error del servidor al eliminar el grupo familiar',
+      codigo: 'ERROR_SERVIDOR'
+    };
+  } finally {
+    if (client) client.release();
   }
 };
 

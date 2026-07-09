@@ -845,6 +845,41 @@ router.post('/unirse-grupo', autenticarUsuario, async (req, res) => {
 });
 
 /**
+ * 20. Eliminar grupo familiar (solo administradores) - elimina todos los datos asociados
+ * DELETE /api/familia/eliminar-grupo
+ */
+router.delete('/eliminar-grupo', autenticarUsuario, async (req, res) => {
+  try {
+    const { usuario_id } = req.body;
+
+    if (!usuario_id) {
+      return res.status(400).json({
+        exito: false,
+        error: 'ID de usuario es requerido',
+        codigo: 'USUARIO_ID_REQUERIDO'
+      });
+    }
+
+    const resultado = await familiaControlador.eliminarGrupoFamiliar(usuario_id);
+
+    if (!resultado.exito) {
+      const statusCode = resultado.codigo === 'NO_ADMIN_O_GRUPO_INACTIVO' ? 403 : 500;
+      return res.status(statusCode).json(resultado);
+    }
+
+    res.status(200).json(resultado);
+
+  } catch (error) {
+    console.error('❌ Error en ruta /eliminar-grupo:', error.message);
+    res.status(500).json({
+      exito: false,
+      error: 'Error interno del servidor',
+      codigo: 'ERROR_INTERNO'
+    });
+  }
+});
+
+/**
  * 19. Ruta de prueba
  * GET /api/familia/status
  */
