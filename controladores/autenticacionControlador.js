@@ -350,8 +350,6 @@ export const iniciarSesionConCodigoPersonalizado = async (codigo_personalizado) 
       LEFT JOIN adultos_mayores am ON am.grupo_familiar_id = gf.id
       WHERE cp.codigo = $1
         AND cp.activo = true
-        AND (cp.fecha_expiracion IS NULL OR cp.fecha_expiracion > NOW())
-        AND (cp.max_usos IS NULL OR cp.usos_actuales < cp.max_usos)
       LIMIT 1
     `;
 
@@ -422,13 +420,6 @@ export const iniciarSesionConCodigoPersonalizado = async (codigo_personalizado) 
     } else {
       console.warn('⚠️ No se encontró adulto_mayor_id para el grupo. El usuario no tendrá adulto mayor asociado.');
     }
-
-    // 6. Actualizar usos del código personalizado
-    await client.query(`
-      UPDATE codigos_personalizados
-      SET usos_actuales = usos_actuales + 1, actualizado_en = NOW()
-      WHERE id = $1
-    `, [codigo.id]);
 
     // 7. Generar token JWT
     const token = jwt.sign(

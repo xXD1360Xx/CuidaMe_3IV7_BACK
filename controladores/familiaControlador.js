@@ -903,8 +903,6 @@ export const obtenerCodigosPersonalizados = async (usuarioId) => {
         cp.actualizado_en,
         u_creador.nombre as creador_nombre,
         CASE 
-          WHEN cp.fecha_expiracion IS NOT NULL AND cp.fecha_expiracion < NOW() THEN 'expirado'
-          WHEN cp.max_usos IS NOT NULL AND cp.usos_actuales >= cp.max_usos THEN 'usado'
           WHEN cp.activo = false THEN 'inactivo'
           ELSE 'activo'
         END as estado
@@ -1037,7 +1035,7 @@ export const crearCodigoPersonalizado = async (usuarioId, datosCodigo) => {
         activo,
         permisos,
         creado_en
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, NOW())
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, NULL, true, $9, NOW())
       RETURNING *
     `;
 
@@ -1054,8 +1052,6 @@ export const crearCodigoPersonalizado = async (usuarioId, datosCodigo) => {
       rol_asignado,
       descripcion,
       usuarioId,
-      max_usos,
-      fecha_expiracion,
       permisos
     ]);
 
