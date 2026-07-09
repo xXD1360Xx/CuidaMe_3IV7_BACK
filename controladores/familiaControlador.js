@@ -1488,15 +1488,12 @@ export const eliminarGrupoFamiliar = async (usuarioId) => {
       `, [grupoId]);
 
       // 6. Desactivar distribuciones de gastos (porcentajes)
-      await client.query(`
-        UPDATE distribuciones_gastos SET activo = false, actualizado_en = NOW()
-        WHERE adulto_mayor_id = $1
-      `, [adultoMayorId]);
-
-      // 7. Desactivar notificaciones relacionadas (opcional, si tienen grupo_id o adulto_id)
-      // Nota: las notificaciones suelen tener usuario_id, no grupo_id, pero podemos desactivar las del grupo
-      // si tenemos un campo grupo_id, o simplemente dejarlas activas porque no molestan.
-      // Si quieres desactivar todas las notificaciones de los usuarios del grupo:
+      if (adultoMayorId) {
+        await client.query(`
+          UPDATE distribuciones_gastos SET activo = false, actualizado_en = NOW()
+          WHERE adulto_mayor_id = $1
+        `, [adultoMayorId]);
+      }
       await client.query(`
         UPDATE notificaciones SET leida = true
         WHERE usuario_id IN (SELECT usuario_id FROM usuario_grupo WHERE grupo_familiar_id = $1)
