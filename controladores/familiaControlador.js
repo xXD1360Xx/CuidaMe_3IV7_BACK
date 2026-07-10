@@ -1576,6 +1576,10 @@ export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
 /**
  * Eliminar grupo familiar y todos sus datos asociados (soft delete en cascada)
  */
+/**
+ * Eliminar grupo familiar y todos sus datos asociados (soft delete en cascada)
+ * ✅ CORREGIDO: Más robusto y con logs detallados
+ */
 export const eliminarGrupoFamiliar = async (usuarioId) => {
   let client;
   try {
@@ -1587,10 +1591,14 @@ export const eliminarGrupoFamiliar = async (usuarioId) => {
       SELECT gf.id, gf.nombre_grupo
       FROM usuario_grupo ug
       JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
-      WHERE ug.usuario_id = $1 AND ug.rol_en_grupo = 'admin' AND gf.activo = true
+      WHERE ug.usuario_id = $1 
+        AND (ug.rol_en_grupo = 'admin' OR ug.rol_en_grupo = 'familiar_admin')
+        AND ug.estado = 'activo' 
+        AND gf.activo = true
     `, [usuarioId]);
 
     if (adminCheck.rows.length === 0) {
+      console.error('❌ Usuario no es administrador o no hay grupo activo');
       return {
         exito: false,
         error: 'No eres administrador o no hay un grupo activo',
@@ -1600,12 +1608,14 @@ export const eliminarGrupoFamiliar = async (usuarioId) => {
 
     const grupoId = adminCheck.rows[0].id;
     const nombreGrupo = adminCheck.rows[0].nombre_grupo;
+    console.log(`✅ Grupo encontrado: ${nombreGrupo} (ID: ${grupoId})`);
 
     // 2. Obtener el adulto_mayor_id asociado al grupo (si existe)
     const adultoResult = await client.query(`
       SELECT id FROM adultos_mayores WHERE grupo_familiar_id = $1
     `, [grupoId]);
     const adultoMayorId = adultoResult.rows.length > 0 ? adultoResult.rows[0].id : null;
+    console.log(`👴 Adulto mayor asociado: ${adultoMayorId || 'Ninguno'}`);
 
     // Iniciar transacción
     await client.query('BEGIN');
@@ -1640,8 +1650,8 @@ export const eliminarGrupoFamiliar = async (usuarioId) => {
             } else {
               query = `UPDATE ${tabla} SET activa = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`;
             }
-            await client.query(query, [adultoMayorId]);
-            console.log(`✅ Tabla ${tabla} actualizada correctamente`);
+            const result = await client.query(query, [adultoMayorId]);
+            console.log(`✅ Tabla ${tabla} actualizada (${result.rowCount} filas)`);
           } catch (err) {
             // Si la tabla no existe, simplemente continuamos
             console.warn(`⚠️ Tabla ${tabla} no existe o no se pudo actualizar:`, err.message);
@@ -1650,25 +1660,30 @@ export const eliminarGrupoFamiliar = async (usuarioId) => {
       }
 
       // 4. Desactivar códigos personalizados del grupo
-      await client.query(`UPDATE codigos_personalizados SET activo = false, actualizado_en = NOW() WHERE grupo_familiar_id = $1`, [grupoId]);
+      const resultCodigos = await client.query(`UPDATE codigos_personalizados SET activo = false, actualizado_en = NOW() WHERE grupo_familiar_id = $1`, [grupoId]);
+      console.log(`✅ Códigos personalizados desactivados (${resultCodigos.rowCount})`);
 
       // 5. Desactivar miembros del grupo
-      await client.query(`UPDATE usuario_grupo SET estado = 'inactivo', actualizado_en = NOW() WHERE grupo_familiar_id = $1`, [grupoId]);
+      const resultMiembros = await client.query(`UPDATE usuario_grupo SET estado = 'inactivo', actualizado_en = NOW() WHERE grupo_familiar_id = $1`, [grupoId]);
+      console.log(`✅ Miembros desactivados (${resultMiembros.rowCount})`);
 
       // 6. Desactivar distribuciones de gastos (si existen)
       if (adultoMayorId) {
         try {
-          await client.query(`UPDATE distribuciones_gastos SET activo = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
+          const resultDist = await client.query(`UPDATE distribuciones_gastos SET activo = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
+          console.log(`✅ Distribuciones de gastos desactivadas (${resultDist.rowCount})`);
         } catch (err) {
           console.warn('⚠️ Tabla distribuciones_gastos no existe o no se pudo actualizar:', err.message);
         }
       }
 
       // 7. Marcar notificaciones como leídas
-      await client.query(`UPDATE notificaciones SET leida = true WHERE usuario_id IN (SELECT usuario_id FROM usuario_grupo WHERE grupo_familiar_id = $1)`, [grupoId]);
+      const resultNotif = await client.query(`UPDATE notificaciones SET leida = true WHERE usuario_id IN (SELECT usuario_id FROM usuario_grupo WHERE grupo_familiar_id = $1)`, [grupoId]);
+      console.log(`✅ Notificaciones marcadas como leídas (${resultNotif.rowCount})`);
 
       // 8. Desactivar el grupo familiar
-      await client.query(`UPDATE grupos_familiares SET activo = false, actualizado_en = NOW() WHERE id = $1`, [grupoId]);
+      const resultGrupo = await client.query(`UPDATE grupos_familiares SET activo = false, actualizado_en = NOW() WHERE id = $1`, [grupoId]);
+      console.log(`✅ Grupo familiar desactivado (${resultGrupo.rowCount})`);
 
       await client.query('COMMIT');
 
@@ -1691,13 +1706,16 @@ export const eliminarGrupoFamiliar = async (usuarioId) => {
     console.error('❌ Error en eliminarGrupoFamiliar:', error.message);
     return {
       exito: false,
-      error: 'Error del servidor al eliminar el grupo familiar',
+      error: 'Error del servidor al eliminar el grupo familiar: ' + error.message,
       codigo: 'ERROR_SERVIDOR'
     };
   } finally {
     if (client) client.release();
   }
 };
+/**
+ * Salir del grupo familiar (para cualquier miembro)
+ */
 /**
  * Salir del grupo familiar (para cualquier miembro)
  */
@@ -1732,17 +1750,38 @@ export const salirDelGrupoFamiliar = async (usuarioId) => {
 
     const data = grupoResult.rows[0];
     const { grupo_familiar_id, rol_en_grupo, total_miembros, total_admins } = data;
-    const esAdmin = rol_en_grupo === 'admin';
+    const esAdmin = rol_en_grupo === 'admin' || rol_en_grupo === 'familiar_admin';
 
-    // 2. Determinar acción según rol y cantidad de miembros
-    // Si es el único administrador y el único miembro → eliminar grupo
+    console.log(`📊 Datos del grupo: total_miembros=${total_miembros}, total_admins=${total_admins}, esAdmin=${esAdmin}`);
+
+    // 2. Si es el único administrador y el único miembro → eliminar grupo
     if (esAdmin && total_admins === 1 && total_miembros === 1) {
-      // Usar la función existente para eliminar grupo
-      return await eliminarGrupoFamiliar(usuarioId);
+      console.log('🗑️ Usuario es el único admin y único miembro, eliminando grupo...');
+      try {
+        const resultado = await eliminarGrupoFamiliar(usuarioId);
+        if (resultado.exito) {
+          return resultado;
+        } else {
+          console.error('❌ Error al eliminar grupo:', resultado.error);
+          return {
+            exito: false,
+            error: 'No se pudo eliminar el grupo familiar: ' + resultado.error,
+            codigo: 'ERROR_ELIMINAR_GRUPO'
+          };
+        }
+      } catch (error) {
+        console.error('❌ Excepción al eliminar grupo:', error.message);
+        return {
+          exito: false,
+          error: 'Error al eliminar el grupo familiar',
+          codigo: 'ERROR_ELIMINAR_GRUPO'
+        };
+      }
     }
 
-    // Si es administrador pero hay otros administradores → degradar a familiar y desactivar
+    // 3. Si es administrador pero hay otros administradores → desactivar su relación
     if (esAdmin && total_admins > 1) {
+      console.log('👋 Usuario administrador con otros admins, desactivando su relación...');
       await client.query(`
         UPDATE usuario_grupo
         SET estado = 'inactivo', actualizado_en = NOW()
@@ -1757,8 +1796,9 @@ export const salirDelGrupoFamiliar = async (usuarioId) => {
       };
     }
 
-    // Si es familiar normal → desactivar relación
+    // 4. Si es familiar normal → desactivar relación
     if (!esAdmin) {
+      console.log('👋 Usuario familiar, desactivando su relación...');
       await client.query(`
         UPDATE usuario_grupo
         SET estado = 'inactivo', actualizado_en = NOW()
@@ -1773,10 +1813,11 @@ export const salirDelGrupoFamiliar = async (usuarioId) => {
       };
     }
 
-    // Fallback (no debería llegar)
+    // Fallback: si llegamos aquí, algo raro pasó
+    console.error('❌ Caso no contemplado en salirDelGrupoFamiliar');
     return {
       exito: false,
-      error: 'No se pudo procesar la solicitud de salida',
+      error: 'No se pudo procesar la solicitud de salida (caso no contemplado)',
       codigo: 'ERROR_SALIDA'
     };
 
@@ -1784,7 +1825,7 @@ export const salirDelGrupoFamiliar = async (usuarioId) => {
     console.error('❌ Error en salirDelGrupoFamiliar:', error.message);
     return {
       exito: false,
-      error: 'Error del servidor al salir del grupo',
+      error: 'Error del servidor al salir del grupo: ' + error.message,
       codigo: 'ERROR_SERVIDOR'
     };
   } finally {
