@@ -1155,21 +1155,21 @@ export const eliminarCodigoPersonalizado = async (usuarioId, codigoId) => {
       };
     }
 
-    // Eliminar código (borrado físico porque aún no se ha usado)
+    // Desvincular el código de cualquier usuario que lo tenga
     await client.query(`
+      UPDATE usuarios 
+      SET codigo_personalizado_id = NULL 
+      WHERE codigo_personalizado_id = $1
+    `, [codigoId]);
+
+    // Intentar eliminar el código (solo si no se ha usado)
+    const deleteResult = await client.query(`
       DELETE FROM codigos_personalizados 
       WHERE id = $1 AND grupo_familiar_id = $2 AND usos_actuales = 0
     `, [codigoId, grupoId]);
 
-    // Si se había usado, desactivarlo
-    const deleteResult = await client.query(`
-      DELETE FROM codigos_personalizados 
-      WHERE id = $1 AND grupo_familiar_id = $2
-      RETURNING id
-    `, [codigoId, grupoId]);
-
-    if (deleteResult.rows.length === 0) {
-      // Si no se pudo eliminar porque ya fue usado, desactivarlo
+    // Si no se pudo eliminar porque ya fue usado, desactivarlo
+    if (deleteResult.rowCount === 0) {
       await client.query(`
         UPDATE codigos_personalizados 
         SET activo = false, actualizado_en = NOW()
@@ -1195,7 +1195,6 @@ export const eliminarCodigoPersonalizado = async (usuarioId, codigoId) => {
     }
   }
 };
-
 // ==================== FUNCIONES DE CREACIÓN Y UNIÓN A GRUPO ====================
 
 /**
