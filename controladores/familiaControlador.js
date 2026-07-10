@@ -871,7 +871,6 @@ export const eliminarFamiliar = async (adminId, familiarId) => {
 };
 
 // ==================== FUNCIONES DE CÓDIGOS PERSONALIZADOS ====================
-
 /**
  * 8. Obtener códigos personalizados del grupo (solo administradores)
  */
@@ -906,7 +905,7 @@ export const obtenerCodigosPersonalizados = async (usuarioId) => {
 
     const grupoId = grupoResult.rows[0].id;
 
-    // Obtener códigos personalizados activos
+    // ✅ FILTRAR SOLO ACTIVOS
     const codigosQuery = `
       SELECT 
         cp.id,
@@ -932,6 +931,7 @@ export const obtenerCodigosPersonalizados = async (usuarioId) => {
       FROM codigos_personalizados cp
       JOIN usuarios u_creador ON cp.creado_por = u_creador.id
       WHERE cp.grupo_familiar_id = $1
+        AND cp.activo = true   -- ← AQUÍ EL CAMBIO
       ORDER BY cp.creado_en DESC
     `;
 
@@ -957,7 +957,6 @@ export const obtenerCodigosPersonalizados = async (usuarioId) => {
     }
   }
 };
-
 /**
  * 9. Crear código personalizado (solo administradores)
  */
@@ -1614,20 +1613,40 @@ export const eliminarGrupoFamiliar = async (usuarioId) => {
     try {
       // 3. Desactivar registros relacionados con el adulto mayor (si existe)
       if (adultoMayorId) {
-        // Enfermedades, alergias, artículos, hobbies, citas, medicinas, etc.
-        await client.query(`UPDATE enfermedades_adulto SET activa = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
-        await client.query(`UPDATE alergias_adulto SET activa = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
-        await client.query(`UPDATE articulos_adulto SET activo = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
-        await client.query(`UPDATE hobbies_adulto SET activo = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
-        await client.query(`UPDATE citas_rutinarias SET activa = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
-        await client.query(`UPDATE medicinas SET activa = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
-        await client.query(`UPDATE mediciones_salud SET activa = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
-        await client.query(`UPDATE eventos_calendario SET activo = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
-        await client.query(`UPDATE gastos SET deleted_at = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
-        await client.query(`UPDATE aportes_gastos SET deleted_at = NOW() WHERE gasto_id IN (SELECT id FROM gastos WHERE adulto_mayor_id = $1)`, [adultoMayorId]);
-        await client.query(`UPDATE actividades_ocurrencias SET activa = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
-        await client.query(`UPDATE actividades_base SET activa = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
-        await client.query(`UPDATE adultos_mayores SET activo = false, actualizado_en = NOW() WHERE id = $1`, [adultoMayorId]);
+        // Lista de tablas a actualizar (con sus consultas)
+        const tablas = [
+          'enfermedades_adulto',
+          'alergias_adulto',
+          'articulos_adulto',
+          'hobbies_adulto',
+          'citas_rutinarias',
+          'medicinas',
+          'mediciones_salud',
+          'eventos_calendario',
+          'gastos',
+          'aportes_gastos',
+          'actividades_ocurrencias',
+          'actividades_base',
+          'adultos_mayores'
+        ];
+
+        for (const tabla of tablas) {
+          try {
+            let query;
+            if (tabla === 'gastos') {
+              query = `UPDATE ${tabla} SET deleted_at = NOW() WHERE adulto_mayor_id = $1`;
+            } else if (tabla === 'aportes_gastos') {
+              query = `UPDATE ${tabla} SET deleted_at = NOW() WHERE gasto_id IN (SELECT id FROM gastos WHERE adulto_mayor_id = $1)`;
+            } else {
+              query = `UPDATE ${tabla} SET activa = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`;
+            }
+            await client.query(query, [adultoMayorId]);
+            console.log(`✅ Tabla ${tabla} actualizada correctamente`);
+          } catch (err) {
+            // Si la tabla no existe, simplemente continuamos
+            console.warn(`⚠️ Tabla ${tabla} no existe o no se pudo actualizar:`, err.message);
+          }
+        }
       }
 
       // 4. Desactivar códigos personalizados del grupo
@@ -1636,9 +1655,13 @@ export const eliminarGrupoFamiliar = async (usuarioId) => {
       // 5. Desactivar miembros del grupo
       await client.query(`UPDATE usuario_grupo SET estado = 'inactivo', actualizado_en = NOW() WHERE grupo_familiar_id = $1`, [grupoId]);
 
-      // 6. Desactivar distribuciones de gastos
+      // 6. Desactivar distribuciones de gastos (si existen)
       if (adultoMayorId) {
-        await client.query(`UPDATE distribuciones_gastos SET activo = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
+        try {
+          await client.query(`UPDATE distribuciones_gastos SET activo = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
+        } catch (err) {
+          console.warn('⚠️ Tabla distribuciones_gastos no existe o no se pudo actualizar:', err.message);
+        }
       }
 
       // 7. Marcar notificaciones como leídas
@@ -1675,7 +1698,6 @@ export const eliminarGrupoFamiliar = async (usuarioId) => {
     if (client) client.release();
   }
 };
-
 /**
  * Salir del grupo familiar (para cualquier miembro)
  */
