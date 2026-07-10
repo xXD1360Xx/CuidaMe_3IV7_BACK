@@ -1171,6 +1171,172 @@ export const eliminarCodigoPersonalizado = async (usuarioId, codigoId) => {
   }
 };
 
+// ==================== FUNCIONES DE CREACIÓN Y UNIÓN A GRUPO ====================
+
+/**
+ * Crear un nuevo grupo familiar (usuario se convierte en admin)
+ */
+export const crearGrupoFamiliar = async (usuarioId, nombreGrupo = 'Mi Familia') => {
+  let client;
+  try {
+    client = await pool.connect();
+
+    // Verificar que el usuario no pertenezca ya a un grupo activo
+    const checkGrupo = await client.query(`
+      SELECT 1 FROM usuario_grupo WHERE usuario_id = $1 AND estado = 'activo'
+    `, [usuarioId]);
+    if (checkGrupo.rows.length > 0) {
+      return {
+        exito: false,
+        error: 'Ya perteneces a un grupo familiar activo',
+        codigo: 'YA_EN_GRUPO'
+      };
+    }
+
+    // Generar código único de 6 caracteres
+    const caracteres = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let codigo;
+    let codigoUnico = false;
+    let intentos = 0;
+    while (!codigoUnico && intentos < 10) {
+      codigo = '';
+      for (let i = 0; i < 6; i++) {
+        codigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
+      }
+      const codigoCheck = await client.query(
+        'SELECT id FROM grupos_familiares WHERE codigo_familiar = $1',
+        [codigo]
+      );
+      if (codigoCheck.rows.length === 0) codigoUnico = true;
+      intentos++;
+    }
+    if (!codigoUnico) {
+      return {
+        exito: false,
+        error: 'No se pudo generar un código único',
+        codigo: 'ERROR_GENERACION_CODIGO'
+      };
+    }
+
+    // Crear grupo
+    const grupoResult = await client.query(`
+      INSERT INTO grupos_familiares (codigo_familiar, nombre_grupo, usuario_admin_id, activo, fecha_creacion, fecha_expiracion, max_integrantes)
+      VALUES ($1, $2, $3, true, NOW(), NOW() + INTERVAL '30 days', 10)
+      RETURNING id, codigo_familiar, nombre_grupo
+    `, [codigo, nombreGrupo, usuarioId]);
+
+    const grupo = grupoResult.rows[0];
+    const grupoId = grupo.id;
+
+    // Asignar usuario como administrador en usuario_grupo
+    await client.query(`
+      INSERT INTO usuario_grupo (usuario_id, grupo_familiar_id, rol_en_grupo, estado, fecha_unio)
+      VALUES ($1, $2, 'admin', 'activo', NOW())
+    `, [usuarioId, grupoId]);
+
+    // Crear entrada en familiares? (opcional, pero para consistencia)
+    // No es necesario porque aún no hay adulto mayor asociado.
+
+    return {
+      exito: true,
+      grupo,
+      mensaje: 'Grupo familiar creado exitosamente'
+    };
+  } catch (error) {
+    console.error('❌ Error en crearGrupoFamiliar:', error.message);
+    return {
+      exito: false,
+      error: 'Error al crear el grupo familiar',
+      codigo: 'ERROR_SERVIDOR'
+    };
+  } finally {
+    if (client) client.release();
+  }
+};
+
+/**
+ * Unirse a un grupo familiar existente
+ */
+export const unirseAGrupoFamiliar = async (usuarioId, codigoFamiliar) => {
+  let client;
+  try {
+    client = await pool.connect();
+
+    // Verificar que el usuario no esté ya en un grupo activo
+    const checkGrupo = await client.query(`
+      SELECT 1 FROM usuario_grupo WHERE usuario_id = $1 AND estado = 'activo'
+    `, [usuarioId]);
+    if (checkGrupo.rows.length > 0) {
+      return {
+        exito: false,
+        error: 'Ya perteneces a un grupo familiar activo',
+        codigo: 'YA_EN_GRUPO'
+      };
+    }
+
+    // Limpiar código
+    const codigoLimpio = codigoFamiliar.replace(/-/g, '').toUpperCase();
+
+    // Buscar grupo activo por código
+    const grupoResult = await client.query(`
+      SELECT id, nombre_grupo, max_integrantes
+      FROM grupos_familiares
+      WHERE codigo_familiar = $1 AND activo = true AND fecha_expiracion > NOW()
+    `, [codigoLimpio]);
+
+    if (grupoResult.rows.length === 0) {
+      return {
+        exito: false,
+        error: 'Código familiar inválido o expirado',
+        codigo: 'CODIGO_INVALIDO'
+      };
+    }
+
+    const grupo = grupoResult.rows[0];
+    const grupoId = grupo.id;
+
+    // Verificar límite de integrantes
+    const countMiembros = await client.query(`
+      SELECT COUNT(*) as total FROM usuario_grupo WHERE grupo_familiar_id = $1 AND estado = 'activo'
+    `, [grupoId]);
+    const totalMiembros = parseInt(countMiembros.rows[0].total);
+    if (totalMiembros >= grupo.max_integrantes) {
+      return {
+        exito: false,
+        error: `El grupo ha alcanzado el límite máximo de ${grupo.max_integrantes} miembros`,
+        codigo: 'GRUPO_LLENO'
+      };
+    }
+
+    // Agregar usuario al grupo como 'familiar'
+    await client.query(`
+      INSERT INTO usuario_grupo (usuario_id, grupo_familiar_id, rol_en_grupo, estado, fecha_unio)
+      VALUES ($1, $2, 'familiar', 'activo', NOW())
+    `, [usuarioId, grupoId]);
+
+    // Notificar al administrador del grupo (opcional)
+    // Podrías obtener el admin y enviar notificación con notificarAFamiliares
+
+    return {
+      exito: true,
+      mensaje: 'Te has unido al grupo familiar exitosamente',
+      grupo: {
+        id: grupo.id,
+        nombre: grupo.nombre_grupo
+      }
+    };
+  } catch (error) {
+    console.error('❌ Error en unirseAGrupoFamiliar:', error.message);
+    return {
+      exito: false,
+      error: 'Error al unirse al grupo familiar',
+      codigo: 'ERROR_SERVIDOR'
+    };
+  } finally {
+    if (client) client.release();
+  }
+};
+
 // ==================== FUNCIONES DE ADULTO MAYOR ====================
 
 /**
@@ -1639,5 +1805,10 @@ export default {
 
   // Adulto mayor
   actualizarAdultoMayor,
-  obtenerAdultoMayor
+  obtenerAdultoMayor,
+
+  // NUEVAS FUNCIONES PARA GESTIÓN DE GRUPO
+  crearGrupoFamiliar,      // ← Agregar
+  unirseAGrupoFamiliar,    // ← Agregar (si está definida)
+  eliminarGrupoFamiliar    // ← Agregar
 };
