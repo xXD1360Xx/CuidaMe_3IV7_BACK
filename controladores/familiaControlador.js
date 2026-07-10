@@ -1719,6 +1719,10 @@ export const eliminarGrupoFamiliar = async (usuarioId) => {
 /**
  * Salir del grupo familiar (para cualquier miembro)
  */
+/**
+ * Salir del grupo familiar (para cualquier miembro)
+ * ✅ CORREGIDO: Conversión explícita de tipos numéricos
+ */
 export const salirDelGrupoFamiliar = async (usuarioId) => {
   let client;
   try {
@@ -1749,13 +1753,18 @@ export const salirDelGrupoFamiliar = async (usuarioId) => {
     }
 
     const data = grupoResult.rows[0];
-    const { grupo_familiar_id, rol_en_grupo, total_miembros, total_admins } = data;
+    const grupo_familiar_id = data.grupo_familiar_id;
+    const rol_en_grupo = data.rol_en_grupo;
+
+    // ✅ CONVERSIÓN EXPLÍCITA A NÚMEROS
+    const totalMiembros = parseInt(data.total_miembros, 10);
+    const totalAdmins = parseInt(data.total_admins, 10);
     const esAdmin = rol_en_grupo === 'admin' || rol_en_grupo === 'familiar_admin';
 
-    console.log(`📊 Datos del grupo: total_miembros=${total_miembros}, total_admins=${total_admins}, esAdmin=${esAdmin}`);
+    console.log(`📊 Datos del grupo: total_miembros=${totalMiembros}, total_admins=${totalAdmins}, esAdmin=${esAdmin}`);
 
     // 2. Si es el único administrador y el único miembro → eliminar grupo
-    if (esAdmin && total_admins === 1 && total_miembros === 1) {
+    if (esAdmin && totalAdmins === 1 && totalMiembros === 1) {
       console.log('🗑️ Usuario es el único admin y único miembro, eliminando grupo...');
       try {
         const resultado = await eliminarGrupoFamiliar(usuarioId);
@@ -1780,7 +1789,7 @@ export const salirDelGrupoFamiliar = async (usuarioId) => {
     }
 
     // 3. Si es administrador pero hay otros administradores → desactivar su relación
-    if (esAdmin && total_admins > 1) {
+    if (esAdmin && totalAdmins > 1) {
       console.log('👋 Usuario administrador con otros admins, desactivando su relación...');
       await client.query(`
         UPDATE usuario_grupo
@@ -1813,7 +1822,7 @@ export const salirDelGrupoFamiliar = async (usuarioId) => {
       };
     }
 
-    // Fallback: si llegamos aquí, algo raro pasó
+    // Fallback: no debería llegar aquí
     console.error('❌ Caso no contemplado en salirDelGrupoFamiliar');
     return {
       exito: false,
