@@ -661,7 +661,7 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
       };
     }
 
-    // Preparar actualización
+    // Preparar actualización de usuarios
     const valores = [];
     const partesQuery = [];
     let contador = 1;
@@ -672,7 +672,8 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
       { nombre: 'telefono', valor: datosFamiliar.telefono },
       { nombre: 'fecha_nacimiento', valor: datosFamiliar.fecha_nacimiento },
       { nombre: 'genero', valor: datosFamiliar.genero },
-      { nombre: 'parentesco', valor: datosFamiliar.parentesco }
+      { nombre: 'parentesco', valor: datosFamiliar.parentesco },
+      { nombre: 'rol', valor: datosFamiliar.rol } // ← AGREGADO
     ];
 
     campos.forEach(campo => {
@@ -683,13 +684,45 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
       }
     });
 
-    // Actualizar rol_en_grupo si se proporciona
-    if (datosFamiliar.rol_en_grupo) {
+    // Si hay algo que actualizar en usuarios
+    if (partesQuery.length > 0) {
+      valores.push(familiarId);
+      const query = `
+        UPDATE usuarios 
+        SET ${partesQuery.join(', ')}, actualizado_en = NOW()
+        WHERE id = $${contador}
+        RETURNING 
+          id,
+          nombre,
+          apellido,
+          email,
+          telefono,
+          fecha_nacimiento,
+          genero,
+          parentesco,
+          rol,
+          estado,
+          creado_en,
+          actualizado_en
+      `;
+      const result = await client.query(query, valores);
+      // result.rows[0] contiene el usuario actualizado
+    }
+
+    // Actualizar rol_en_grupo si se proporciona rol
+    if (datosFamiliar.rol) {
+      let rolEnGrupo = 'familiar';
+      if (datosFamiliar.rol === 'familiar_admin' || datosFamiliar.rol === 'familiar_administrador') {
+        rolEnGrupo = 'admin';
+      } else if (datosFamiliar.rol === 'familiar_principal' || datosFamiliar.rol === 'familiar_secundario') {
+        rolEnGrupo = 'familiar';
+      }
+      // Si es adulto_mayor, también puede ser familiar, pero por simplicidad lo dejamos como 'familiar'
       await client.query(`
         UPDATE usuario_grupo 
         SET rol_en_grupo = $1, actualizado_en = NOW()
         WHERE usuario_id = $2 AND grupo_familiar_id = $3
-      `, [datosFamiliar.rol_en_grupo, familiarId, grupoId]);
+      `, [rolEnGrupo, familiarId, grupoId]);
     }
 
     // Actualizar relación con adulto mayor si se proporciona
@@ -701,41 +734,32 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
       `, [datosFamiliar.relacion_adulto_mayor, familiarId, grupoId]);
     }
 
-    // Si no hay nada que actualizar en la tabla usuarios
-    if (partesQuery.length === 0) {
-      return {
-        exito: false,
-        error: 'No se proporcionaron datos para actualizar',
-        codigo: 'DATOS_INCOMPLETOS'
-      };
-    }
-
-    valores.push(familiarId);
-
-    const query = `
-      UPDATE usuarios 
-      SET ${partesQuery.join(', ')}, actualizado_en = NOW()
-      WHERE id = $${contador}
-      RETURNING 
-        id,
-        nombre,
-        apellido,
-        email,
-        telefono,
-        fecha_nacimiento,
-        genero,
-        parentesco,
-        rol,
-        estado,
-        creado_en,
-        actualizado_en
+    // Obtener el familiar actualizado completo para devolver
+    const finalQuery = `
+      SELECT 
+        u.id,
+        u.nombre,
+        u.apellido,
+        u.email,
+        u.telefono,
+        u.fecha_nacimiento,
+        u.genero,
+        u.parentesco,
+        u.rol,
+        u.estado,
+        ug.rol_en_grupo,
+        ug.relacion_adulto_mayor,
+        u.creado_en,
+        u.actualizado_en
+      FROM usuarios u
+      JOIN usuario_grupo ug ON u.id = ug.usuario_id
+      WHERE u.id = $1 AND ug.grupo_familiar_id = $2
     `;
-
-    const result = await client.query(query, valores);
+    const finalResult = await client.query(finalQuery, [familiarId, grupoId]);
 
     return {
       exito: true,
-      familiar: result.rows[0],
+      familiar: finalResult.rows[0],
       mensaje: 'Familiar actualizado exitosamente'
     };
 
@@ -752,7 +776,6 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
     }
   }
 };
-
 /**
  * 7. Eliminar familiar del grupo (solo administradores)
  */
@@ -1586,122 +1609,45 @@ export const eliminarGrupoFamiliar = async (usuarioId) => {
     `, [grupoId]);
     const adultoMayorId = adultoResult.rows.length > 0 ? adultoResult.rows[0].id : null;
 
-    // Iniciar transacción para asegurar integridad
+    // Iniciar transacción
     await client.query('BEGIN');
 
     try {
       // 3. Desactivar registros relacionados con el adulto mayor (si existe)
       if (adultoMayorId) {
-        // Enfermedades
-        await client.query(`
-          UPDATE enfermedades_adulto SET activa = false, actualizado_en = NOW()
-          WHERE adulto_mayor_id = $1
-        `, [adultoMayorId]);
-
-        // Alergias
-        await client.query(`
-          UPDATE alergias_adulto SET activa = false, actualizado_en = NOW()
-          WHERE adulto_mayor_id = $1
-        `, [adultoMayorId]);
-
-        // Artículos
-        await client.query(`
-          UPDATE articulos_adulto SET activo = false, actualizado_en = NOW()
-          WHERE adulto_mayor_id = $1
-        `, [adultoMayorId]);
-
-        // Hobbies
-        await client.query(`
-          UPDATE hobbies_adulto SET activo = false, actualizado_en = NOW()
-          WHERE adulto_mayor_id = $1
-        `, [adultoMayorId]);
-
-        // Citas rutinarias
-        await client.query(`
-          UPDATE citas_rutinarias SET activa = false, actualizado_en = NOW()
-          WHERE adulto_mayor_id = $1
-        `, [adultoMayorId]);
-
-        // Medicinas (habituales)
-        await client.query(`
-          UPDATE medicinas SET activa = false, actualizado_en = NOW()
-          WHERE adulto_mayor_id = $1
-        `, [adultoMayorId]);
-
-        // Mediciones de salud (si existen)
-        await client.query(`
-          UPDATE mediciones_salud SET activa = false, actualizado_en = NOW()
-          WHERE adulto_mayor_id = $1
-        `, [adultoMayorId]);
-
-        // Eventos del calendario (si tienen adulto_mayor_id)
-        await client.query(`
-          UPDATE eventos_calendario SET activo = false, actualizado_en = NOW()
-          WHERE adulto_mayor_id = $1
-        `, [adultoMayorId]);
-
-        // Gastos (futuros, pasados, todos)
-        await client.query(`
-          UPDATE gastos SET deleted_at = NOW()
-          WHERE adulto_mayor_id = $1
-        `, [adultoMayorId]);
-
-        // Aportes a gastos (relacionados con los gastos del adulto)
-        await client.query(`
-          UPDATE aportes_gastos SET deleted_at = NOW()
-          WHERE gasto_id IN (SELECT id FROM gastos WHERE adulto_mayor_id = $1)
-        `, [adultoMayorId]);
-
-        // Actividades del horario (ocurrencias) - si tienen adulto_mayor_id o grupo_id
-        await client.query(`
-          UPDATE actividades_ocurrencias SET activa = false, actualizado_en = NOW()
-          WHERE adulto_mayor_id = $1
-        `, [adultoMayorId]);
-
-        // Actividades base (hobbies, rutinas) - si están asociadas al adulto mayor
-        await client.query(`
-          UPDATE actividades_base SET activa = false, actualizado_en = NOW()
-          WHERE adulto_mayor_id = $1
-        `, [adultoMayorId]);
-
-        // Desactivar el adulto mayor
-        await client.query(`
-          UPDATE adultos_mayores SET activo = false, actualizado_en = NOW()
-          WHERE id = $1
-        `, [adultoMayorId]);
+        // Enfermedades, alergias, artículos, hobbies, citas, medicinas, etc.
+        await client.query(`UPDATE enfermedades_adulto SET activa = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
+        await client.query(`UPDATE alergias_adulto SET activa = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
+        await client.query(`UPDATE articulos_adulto SET activo = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
+        await client.query(`UPDATE hobbies_adulto SET activo = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
+        await client.query(`UPDATE citas_rutinarias SET activa = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
+        await client.query(`UPDATE medicinas SET activa = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
+        await client.query(`UPDATE mediciones_salud SET activa = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
+        await client.query(`UPDATE eventos_calendario SET activo = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
+        await client.query(`UPDATE gastos SET deleted_at = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
+        await client.query(`UPDATE aportes_gastos SET deleted_at = NOW() WHERE gasto_id IN (SELECT id FROM gastos WHERE adulto_mayor_id = $1)`, [adultoMayorId]);
+        await client.query(`UPDATE actividades_ocurrencias SET activa = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
+        await client.query(`UPDATE actividades_base SET activa = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
+        await client.query(`UPDATE adultos_mayores SET activo = false, actualizado_en = NOW() WHERE id = $1`, [adultoMayorId]);
       }
 
       // 4. Desactivar códigos personalizados del grupo
-      await client.query(`
-        UPDATE codigos_personalizados SET activo = false, actualizado_en = NOW()
-        WHERE grupo_familiar_id = $1
-      `, [grupoId]);
+      await client.query(`UPDATE codigos_personalizados SET activo = false, actualizado_en = NOW() WHERE grupo_familiar_id = $1`, [grupoId]);
 
-      // 5. Desactivar miembros del grupo (usuario_grupo)
-      await client.query(`
-        UPDATE usuario_grupo SET estado = 'inactivo', actualizado_en = NOW()
-        WHERE grupo_familiar_id = $1
-      `, [grupoId]);
+      // 5. Desactivar miembros del grupo
+      await client.query(`UPDATE usuario_grupo SET estado = 'inactivo', actualizado_en = NOW() WHERE grupo_familiar_id = $1`, [grupoId]);
 
-      // 6. Desactivar distribuciones de gastos (porcentajes)
+      // 6. Desactivar distribuciones de gastos
       if (adultoMayorId) {
-        await client.query(`
-          UPDATE distribuciones_gastos SET activo = false, actualizado_en = NOW()
-          WHERE adulto_mayor_id = $1
-        `, [adultoMayorId]);
+        await client.query(`UPDATE distribuciones_gastos SET activo = false, actualizado_en = NOW() WHERE adulto_mayor_id = $1`, [adultoMayorId]);
       }
-      await client.query(`
-        UPDATE notificaciones SET leida = true
-        WHERE usuario_id IN (SELECT usuario_id FROM usuario_grupo WHERE grupo_familiar_id = $1)
-      `, [grupoId]);
+
+      // 7. Marcar notificaciones como leídas
+      await client.query(`UPDATE notificaciones SET leida = true WHERE usuario_id IN (SELECT usuario_id FROM usuario_grupo WHERE grupo_familiar_id = $1)`, [grupoId]);
 
       // 8. Desactivar el grupo familiar
-      await client.query(`
-        UPDATE grupos_familiares SET activo = false, actualizado_en = NOW()
-        WHERE id = $1
-      `, [grupoId]);
+      await client.query(`UPDATE grupos_familiares SET activo = false, actualizado_en = NOW() WHERE id = $1`, [grupoId]);
 
-      // Commit de la transacción
       await client.query('COMMIT');
 
       console.log(`✅ Grupo familiar "${nombreGrupo}" (ID: ${grupoId}) eliminado con todos sus datos asociados.`);
@@ -1731,6 +1677,99 @@ export const eliminarGrupoFamiliar = async (usuarioId) => {
   }
 };
 
+/**
+ * Salir del grupo familiar (para cualquier miembro)
+ */
+export const salirDelGrupoFamiliar = async (usuarioId) => {
+  let client;
+  try {
+    console.log(`🚪 [FAMILIA] Usuario ${usuarioId} intenta salir del grupo`);
+    client = await pool.connect();
+
+    // 1. Obtener grupo del usuario y su rol
+    const grupoQuery = `
+      SELECT 
+        ug.grupo_familiar_id,
+        ug.rol_en_grupo,
+        gf.id as grupo_id,
+        gf.nombre_grupo,
+        (SELECT COUNT(*) FROM usuario_grupo WHERE grupo_familiar_id = ug.grupo_familiar_id AND estado = 'activo') as total_miembros,
+        (SELECT COUNT(*) FROM usuario_grupo WHERE grupo_familiar_id = ug.grupo_familiar_id AND estado = 'activo' AND rol_en_grupo = 'admin') as total_admins
+      FROM usuario_grupo ug
+      JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
+      WHERE ug.usuario_id = $1 AND ug.estado = 'activo' AND gf.activo = true
+    `;
+
+    const grupoResult = await client.query(grupoQuery, [usuarioId]);
+    if (grupoResult.rows.length === 0) {
+      return {
+        exito: false,
+        error: 'No perteneces a ningún grupo familiar activo',
+        codigo: 'SIN_GRUPO'
+      };
+    }
+
+    const data = grupoResult.rows[0];
+    const { grupo_familiar_id, rol_en_grupo, total_miembros, total_admins } = data;
+    const esAdmin = rol_en_grupo === 'admin';
+
+    // 2. Determinar acción según rol y cantidad de miembros
+    // Si es el único administrador y el único miembro → eliminar grupo
+    if (esAdmin && total_admins === 1 && total_miembros === 1) {
+      // Usar la función existente para eliminar grupo
+      return await eliminarGrupoFamiliar(usuarioId);
+    }
+
+    // Si es administrador pero hay otros administradores → degradar a familiar y desactivar
+    if (esAdmin && total_admins > 1) {
+      await client.query(`
+        UPDATE usuario_grupo
+        SET estado = 'inactivo', actualizado_en = NOW()
+        WHERE usuario_id = $1 AND grupo_familiar_id = $2
+      `, [usuarioId, grupo_familiar_id]);
+
+      return {
+        exito: true,
+        mensaje: 'Has salido del grupo familiar. Ya no eres administrador.',
+        accion: 'salir',
+        grupo_id: grupo_familiar_id
+      };
+    }
+
+    // Si es familiar normal → desactivar relación
+    if (!esAdmin) {
+      await client.query(`
+        UPDATE usuario_grupo
+        SET estado = 'inactivo', actualizado_en = NOW()
+        WHERE usuario_id = $1 AND grupo_familiar_id = $2
+      `, [usuarioId, grupo_familiar_id]);
+
+      return {
+        exito: true,
+        mensaje: 'Has salido del grupo familiar.',
+        accion: 'salir',
+        grupo_id: grupo_familiar_id
+      };
+    }
+
+    // Fallback (no debería llegar)
+    return {
+      exito: false,
+      error: 'No se pudo procesar la solicitud de salida',
+      codigo: 'ERROR_SALIDA'
+    };
+
+  } catch (error) {
+    console.error('❌ Error en salirDelGrupoFamiliar:', error.message);
+    return {
+      exito: false,
+      error: 'Error del servidor al salir del grupo',
+      codigo: 'ERROR_SERVIDOR'
+    };
+  } finally {
+    if (client) client.release();
+  }
+};
 /**
  * 12. Obtener información del adulto mayor del grupo
  */
@@ -1815,103 +1854,6 @@ export const obtenerAdultoMayor = async (usuarioId) => {
 };
 
 
-/**
- * Salir del grupo familiar (para cualquier miembro)
- * - Si es el único administrador y único miembro, se elimina el grupo.
- * - Si es administrador pero hay otros administradores, se degrada a familiar y se desactiva su relación.
- * - Si es familiar normal, se desactiva su relación.
- */
-export const salirDelGrupoFamiliar = async (usuarioId) => {
-  let client;
-  try {
-    console.log(`🚪 [FAMILIA] Usuario ${usuarioId} intenta salir del grupo`);
-    client = await pool.connect();
-
-    // 1. Obtener grupo del usuario y su rol
-    const grupoQuery = `
-      SELECT 
-        ug.grupo_familiar_id,
-        ug.rol_en_grupo,
-        gf.id as grupo_id,
-        gf.nombre_grupo,
-        (SELECT COUNT(*) FROM usuario_grupo WHERE grupo_familiar_id = ug.grupo_familiar_id AND estado = 'activo') as total_miembros,
-        (SELECT COUNT(*) FROM usuario_grupo WHERE grupo_familiar_id = ug.grupo_familiar_id AND estado = 'activo' AND rol_en_grupo = 'admin') as total_admins
-      FROM usuario_grupo ug
-      JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
-      WHERE ug.usuario_id = $1 AND ug.estado = 'activo' AND gf.activo = true
-    `;
-
-    const grupoResult = await client.query(grupoQuery, [usuarioId]);
-    if (grupoResult.rows.length === 0) {
-      return {
-        exito: false,
-        error: 'No perteneces a ningún grupo familiar activo',
-        codigo: 'SIN_GRUPO'
-      };
-    }
-
-    const data = grupoResult.rows[0];
-    const { grupo_familiar_id, rol_en_grupo, total_miembros, total_admins } = data;
-    const esAdmin = rol_en_grupo === 'admin';
-
-    // 2. Determinar acción según rol y cantidad de miembros
-    // Si es el único administrador y el único miembro → eliminar grupo
-    if (esAdmin && total_admins === 1 && total_miembros === 1) {
-      // Reutilizar la función existente para eliminar grupo
-      return await eliminarGrupoFamiliar(usuarioId);
-    }
-
-    // Si es administrador pero hay otros administradores → degradar a familiar y desactivar
-    if (esAdmin && total_admins > 1) {
-      // Desactivar su relación en usuario_grupo (o cambiar rol a 'familiar')
-      await client.query(`
-        UPDATE usuario_grupo
-        SET estado = 'inactivo', actualizado_en = NOW()
-        WHERE usuario_id = $1 AND grupo_familiar_id = $2
-      `, [usuarioId, grupo_familiar_id]);
-
-      return {
-        exito: true,
-        mensaje: 'Has salido del grupo familiar. Ya no eres administrador.',
-        accion: 'salir',
-        grupo_id: grupo_familiar_id
-      };
-    }
-
-    // Si es familiar normal → desactivar relación
-    if (!esAdmin) {
-      await client.query(`
-        UPDATE usuario_grupo
-        SET estado = 'inactivo', actualizado_en = NOW()
-        WHERE usuario_id = $1 AND grupo_familiar_id = $2
-      `, [usuarioId, grupo_familiar_id]);
-
-      return {
-        exito: true,
-        mensaje: 'Has salido del grupo familiar.',
-        accion: 'salir',
-        grupo_id: grupo_familiar_id
-      };
-    }
-
-    // Fallback (no debería llegar)
-    return {
-      exito: false,
-      error: 'No se pudo procesar la solicitud de salida',
-      codigo: 'ERROR_SALIDA'
-    };
-
-  } catch (error) {
-    console.error('❌ Error en salirDelGrupoFamiliar:', error.message);
-    return {
-      exito: false,
-      error: 'Error del servidor al salir del grupo',
-      codigo: 'ERROR_SERVIDOR'
-    };
-  } finally {
-    if (client) client.release();
-  }
-};
 
 // ==================== EXPORTACIÓN ====================
 
