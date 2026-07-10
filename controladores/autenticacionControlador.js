@@ -421,6 +421,13 @@ export const iniciarSesionConCodigoPersonalizado = async (codigo_personalizado) 
       console.warn('⚠️ No se encontró adulto_mayor_id para el grupo. El usuario no tendrá adulto mayor asociado.');
     }
 
+    // 6. Incrementar usos del código personalizado
+    await client.query(`
+  UPDATE codigos_personalizados
+  SET usos_actuales = usos_actuales + 1, actualizado_en = NOW()
+  WHERE id = $1
+`, [codigo.id]);
+
     // 7. Generar token JWT
     const token = jwt.sign(
       {
@@ -435,21 +442,57 @@ export const iniciarSesionConCodigoPersonalizado = async (codigo_personalizado) 
       { expiresIn: JWT_EXPIRES_IN }
     );
 
-    // 8. Obtener datos del usuario completo
+
+    // Después de asociar a usuario_grupo y familiares, obtener datos completos
     const userDataResult = await client.query(`
-      SELECT id, nombre, apellido, email, rol, estado, telefono, fecha_nacimiento, genero, parentesco
-      FROM usuarios 
-      WHERE id = $1
+      SELECT 
+        u.id, u.nombre, u.apellido, u.email, u.rol, u.estado, 
+        u.telefono, u.fecha_nacimiento, u.genero, u.parentesco,
+        ug.grupo_familiar_id,
+        gf.codigo_familiar,
+        gf.nombre_grupo,
+        am.id as adulto_mayor_id,
+        am.nombre as adulto_mayor_nombre,
+        CASE WHEN am.id IS NOT NULL THEN true ELSE false END as tiene_adulto_mayor
+      FROM usuarios u
+      LEFT JOIN usuario_grupo ug ON u.id = ug.usuario_id AND ug.estado = 'activo'
+      LEFT JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
+      LEFT JOIN adultos_mayores am ON gf.id = am.grupo_familiar_id
+      WHERE u.id = $1
     `, [usuarioId]);
 
     const usuario = userDataResult.rows[0];
 
+    // Construir objeto de respuesta con grupo
+    const usuarioRespuesta = {
+      id: usuario.id,
+      nombre: usuario.nombre,
+      email: usuario.email,
+      rol: usuario.rol,
+      telefono: usuario.telefono,
+      fecha_nacimiento: usuario.fecha_nacimiento,
+      genero: usuario.genero,
+      parentesco: usuario.parentesco,
+      tiene_adulto_mayor: usuario.tiene_adulto_mayor,   // <--- NUEVO
+      grupo_familiar: usuario.grupo_familiar_id ? {
+        id: usuario.grupo_familiar_id,
+        codigo: usuario.codigo_familiar,
+        nombre: usuario.nombre_grupo
+        // ya no hace falta `tiene_adulto_mayor` aquí porque está arriba
+      } : null,
+      adulto_mayor: usuario.adulto_mayor_id ? {
+        id: usuario.adulto_mayor_id,
+        nombre: usuario.adulto_mayor_nombre
+      } : null
+    };
+
     return {
       exito: true,
       token,
-      usuario,
+      usuario: usuarioRespuesta,
       mensaje: 'Inicio de sesión con código personalizado exitoso'
     };
+
 
   } catch (error) {
     console.error('❌ Error en iniciarSesionConCodigoPersonalizado:', error.message);

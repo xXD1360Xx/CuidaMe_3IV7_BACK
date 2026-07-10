@@ -902,7 +902,9 @@ export const obtenerCodigosPersonalizados = async (usuarioId) => {
         u_creador.nombre as creador_nombre,
         CASE 
           WHEN cp.activo = false THEN 'inactivo'
-          ELSE 'activo'
+          WHEN cp.usos_actuales > 0 THEN 'en uso'
+          WHEN cp.max_usos IS NOT NULL AND cp.usos_actuales >= cp.max_usos THEN 'en uso'
+          ELSE 'pendiente'
         END as estado
       FROM codigos_personalizados cp
       JOIN usuarios u_creador ON cp.creado_por = u_creador.id
@@ -1478,6 +1480,34 @@ export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
         direccion || null,
         notas_medicas || null
       ]);
+
+      // ============================================================
+      // 🔥 DESPUÉS de obtener resultado (resultado.rows[0])
+      // ============================================================
+      const adulto_mayor_id = resultado.rows[0].id;
+
+      // Obtener todos los miembros activos del grupo
+      const miembrosQuery = `
+        SELECT usuario_id FROM usuario_grupo 
+        WHERE grupo_familiar_id = $1 AND estado = 'activo'
+      `;
+      const miembrosResult = await client.query(miembrosQuery, [grupoId]);
+
+      for (const miembro of miembrosResult.rows) {
+        // Verificar si ya existe relación en familiares
+        const existente = await client.query(
+          'SELECT id FROM familiares WHERE usuario_id = $1 AND adulto_mayor_id = $2',
+          [miembro.usuario_id, adulto_mayor_id]
+        );
+        if (existente.rows.length === 0) {
+          const esPrincipal = miembro.usuario_id === usuarioId; // el usuario que crea/edita es el principal
+          await client.query(`
+            INSERT INTO familiares (usuario_id, adulto_mayor_id, es_principal, rol_familiar, parentesco, creado_en)
+            VALUES ($1, $2, $3, 'familiar', 'Familiar', NOW())
+          `, [miembro.usuario_id, adulto_mayor_id, esPrincipal]);
+        }
+      }
+      // ============================================================ 
     }
 
     // ============================================================
