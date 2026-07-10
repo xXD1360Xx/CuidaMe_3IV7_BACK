@@ -845,6 +845,20 @@ router.post('/unirse-grupo', autenticarUsuario, async (req, res) => {
 });
 
 /**
+ * 19. Ruta de prueba
+ * GET /api/familia/status
+ */
+router.get('/status', (req, res) => {
+  res.status(200).json({
+    exito: true,
+    mensaje: 'API de Gestión Familiar funcionando correctamente',
+    version: '1.0.0',
+    fecha: new Date().toISOString()
+  });
+});
+
+
+/**
  * 20. Eliminar grupo familiar (solo administradores) - elimina todos los datos asociados
  * DELETE /api/familia/eliminar-grupo
  */
@@ -879,17 +893,42 @@ router.delete('/eliminar-grupo', autenticarUsuario, async (req, res) => {
   }
 });
 
+
+
 /**
- * 19. Ruta de prueba
- * GET /api/familia/status
+ * 21. Salir del grupo familiar (para cualquier miembro)
+ * POST /api/familia/salir-grupo
  */
-router.get('/status', (req, res) => {
-  res.status(200).json({
-    exito: true,
-    mensaje: 'API de Gestión Familiar funcionando correctamente',
-    version: '1.0.0',
-    fecha: new Date().toISOString()
-  });
+router.post('/salir-grupo', autenticarUsuario, async (req, res) => {
+  try {
+    const { usuario_id } = req.body;
+
+    if (!usuario_id) {
+      return res.status(400).json({
+        exito: false,
+        error: 'ID de usuario es requerido',
+        codigo: 'USUARIO_ID_REQUERIDO'
+      });
+    }
+
+    const resultado = await familiaControlador.salirDelGrupoFamiliar(usuario_id);
+
+    if (!resultado.exito) {
+      const statusCode = resultado.codigo === 'SIN_GRUPO' ? 404 :
+        resultado.codigo === 'ERROR_SALIDA' ? 400 : 500;
+      return res.status(statusCode).json(resultado);
+    }
+
+    res.status(200).json(resultado);
+
+  } catch (error) {
+    console.error('❌ Error en ruta /salir-grupo:', error.message);
+    res.status(500).json({
+      exito: false,
+      error: 'Error interno del servidor',
+      codigo: 'ERROR_INTERNO'
+    });
+  }
 });
 
 // ==================== EXPORTACIÓN ====================

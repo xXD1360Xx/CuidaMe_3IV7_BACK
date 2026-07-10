@@ -1784,6 +1784,105 @@ export const obtenerAdultoMayor = async (usuarioId) => {
   }
 };
 
+
+/**
+ * Salir del grupo familiar (para cualquier miembro)
+ * - Si es el único administrador y único miembro, se elimina el grupo.
+ * - Si es administrador pero hay otros administradores, se degrada a familiar y se desactiva su relación.
+ * - Si es familiar normal, se desactiva su relación.
+ */
+export const salirDelGrupoFamiliar = async (usuarioId) => {
+  let client;
+  try {
+    console.log(`🚪 [FAMILIA] Usuario ${usuarioId} intenta salir del grupo`);
+    client = await pool.connect();
+
+    // 1. Obtener grupo del usuario y su rol
+    const grupoQuery = `
+      SELECT 
+        ug.grupo_familiar_id,
+        ug.rol_en_grupo,
+        gf.id as grupo_id,
+        gf.nombre_grupo,
+        (SELECT COUNT(*) FROM usuario_grupo WHERE grupo_familiar_id = ug.grupo_familiar_id AND estado = 'activo') as total_miembros,
+        (SELECT COUNT(*) FROM usuario_grupo WHERE grupo_familiar_id = ug.grupo_familiar_id AND estado = 'activo' AND rol_en_grupo = 'admin') as total_admins
+      FROM usuario_grupo ug
+      JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
+      WHERE ug.usuario_id = $1 AND ug.estado = 'activo' AND gf.activo = true
+    `;
+
+    const grupoResult = await client.query(grupoQuery, [usuarioId]);
+    if (grupoResult.rows.length === 0) {
+      return {
+        exito: false,
+        error: 'No perteneces a ningún grupo familiar activo',
+        codigo: 'SIN_GRUPO'
+      };
+    }
+
+    const data = grupoResult.rows[0];
+    const { grupo_familiar_id, rol_en_grupo, total_miembros, total_admins } = data;
+    const esAdmin = rol_en_grupo === 'admin';
+
+    // 2. Determinar acción según rol y cantidad de miembros
+    // Si es el único administrador y el único miembro → eliminar grupo
+    if (esAdmin && total_admins === 1 && total_miembros === 1) {
+      // Reutilizar la función existente para eliminar grupo
+      return await eliminarGrupoFamiliar(usuarioId);
+    }
+
+    // Si es administrador pero hay otros administradores → degradar a familiar y desactivar
+    if (esAdmin && total_admins > 1) {
+      // Desactivar su relación en usuario_grupo (o cambiar rol a 'familiar')
+      await client.query(`
+        UPDATE usuario_grupo
+        SET estado = 'inactivo', actualizado_en = NOW()
+        WHERE usuario_id = $1 AND grupo_familiar_id = $2
+      `, [usuarioId, grupo_familiar_id]);
+
+      return {
+        exito: true,
+        mensaje: 'Has salido del grupo familiar. Ya no eres administrador.',
+        accion: 'salir',
+        grupo_id: grupo_familiar_id
+      };
+    }
+
+    // Si es familiar normal → desactivar relación
+    if (!esAdmin) {
+      await client.query(`
+        UPDATE usuario_grupo
+        SET estado = 'inactivo', actualizado_en = NOW()
+        WHERE usuario_id = $1 AND grupo_familiar_id = $2
+      `, [usuarioId, grupo_familiar_id]);
+
+      return {
+        exito: true,
+        mensaje: 'Has salido del grupo familiar.',
+        accion: 'salir',
+        grupo_id: grupo_familiar_id
+      };
+    }
+
+    // Fallback (no debería llegar)
+    return {
+      exito: false,
+      error: 'No se pudo procesar la solicitud de salida',
+      codigo: 'ERROR_SALIDA'
+    };
+
+  } catch (error) {
+    console.error('❌ Error en salirDelGrupoFamiliar:', error.message);
+    return {
+      exito: false,
+      error: 'Error del servidor al salir del grupo',
+      codigo: 'ERROR_SERVIDOR'
+    };
+  } finally {
+    if (client) client.release();
+  }
+};
+
 // ==================== EXPORTACIÓN ====================
 
 export default {
@@ -1810,5 +1909,6 @@ export default {
   // NUEVAS FUNCIONES PARA GESTIÓN DE GRUPO
   crearGrupoFamiliar,      // ← Agregar
   unirseAGrupoFamiliar,    // ← Agregar (si está definida)
-  eliminarGrupoFamiliar    // ← Agregar
+  eliminarGrupoFamiliar,   // ← Agregar
+  salirDelGrupoFamiliar    // ← Agregar
 };
