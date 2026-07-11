@@ -4,7 +4,9 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { enviarCodigoVerificacion } from '../servicios/emailService.js';
-
+import {
+  asignarAdultoMayorDelGrupoAUsuario,
+} from '../controladores/familiaControlador.js';
 // Configuración
 const JWT_SECRETO = process.env.JWT_SECRETO || 'cuidame_secret_key_2024_produccion';
 const JWT_EXPIRES_IN = '7d';
