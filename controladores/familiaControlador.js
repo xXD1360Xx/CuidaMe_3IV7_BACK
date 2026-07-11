@@ -230,7 +230,7 @@ export const regenerarCodigoFamiliar = async (usuarioId) => {
 
     const grupo = grupoResult.rows[0];
 
-    // Generar nuevo código de 6 caracteres
+    // Generar nuevo código de 5 caracteres
     const caracteres = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let codigo;
     let codigoUnico = false;
@@ -238,7 +238,7 @@ export const regenerarCodigoFamiliar = async (usuarioId) => {
 
     while (!codigoUnico && intentos < 10) {
       codigo = '';
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 5; i++) {
         codigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
       }
 
@@ -1017,7 +1017,7 @@ export const crearCodigoPersonalizado = async (usuarioId, datosCodigo) => {
 
     while (!codigoUnico && intentos < 10) {
       codigo = '';
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 6; i++) {
         codigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
       }
 
