@@ -544,7 +544,7 @@ router.get('/rutas', (req, res) => {
         body: {
           email: 'string',
           contrasena: 'string',
-          codigo_familiar: 'string (4 caracteres)'
+          codigo_familiar: 'string (5 caracteres)'
         }
       },
       {

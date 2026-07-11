@@ -1017,7 +1017,7 @@ export const crearCodigoPersonalizado = async (usuarioId, datosCodigo) => {
 
     while (!codigoUnico && intentos < 10) {
       codigo = '';
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 5; i++) {
         codigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
       }
 
@@ -1223,7 +1223,7 @@ export const crearGrupoFamiliar = async (usuarioId, nombreGrupo = 'Mi Familia') 
     let intentos = 0;
     while (!codigoUnico && intentos < 10) {
       codigo = '';
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 5; i++) {
         codigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
       }
       const codigoCheck = await client.query(
