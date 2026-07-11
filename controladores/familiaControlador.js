@@ -1285,8 +1285,7 @@ export const crearGrupoFamiliar = async (usuarioId, nombreGrupo = 'Mi Familia') 
       VALUES ($1, $2, 'admin', 'activo', NOW())
     `, [usuarioId, grupoId]);
 
-    // Crear entrada en familiares? (opcional, pero para consistencia)
-    // No es necesario porque aún no hay adulto mayor asociado.
+    await asignarAdultoMayorDelGrupoAUsuario(grupoId, usuarioId);
 
     return {
       exito: true,
@@ -1365,8 +1364,7 @@ export const unirseAGrupoFamiliar = async (usuarioId, codigoFamiliar) => {
       VALUES ($1, $2, 'familiar', 'activo', NOW())
     `, [usuarioId, grupoId]);
 
-    // Notificar al administrador del grupo (opcional)
-    // Podrías obtener el admin y enviar notificación con notificarAFamiliares
+    await asignarAdultoMayorDelGrupoAUsuario(grupoId, usuarioId);
 
     return {
       exito: true,
@@ -1529,31 +1527,42 @@ export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
         direccion || null,
         notas_medicas || null
       ]);
+      // Dentro de actualizarAdultoMayor, después de obtener el adulto_mayor_id (ya sea insert o update):
 
-      // ============================================================
-      // 🔥 DESPUÉS de obtener resultado (resultado.rows[0])
-      // ============================================================
       const adulto_mayor_id = resultado.rows[0].id;
 
-      // Obtener todos los miembros activos del grupo
+      // ✅ Asignar este adulto mayor a todos los miembros activos del grupo
       const miembrosQuery = `
-        SELECT usuario_id FROM usuario_grupo 
-        WHERE grupo_familiar_id = $1 AND estado = 'activo'
-      `;
+  SELECT usuario_id FROM usuario_grupo
+  WHERE grupo_familiar_id = $1 AND estado = 'activo'
+`;
       const miembrosResult = await client.query(miembrosQuery, [grupoId]);
 
       for (const miembro of miembrosResult.rows) {
         // Verificar si ya existe relación en familiares
         const existente = await client.query(
-          'SELECT id FROM familiares WHERE usuario_id = $1 AND adulto_mayor_id = $2',
+          'SELECT id FROM familiares WHERE usuario_id = $1 AND adulto_mayor_id = $2 AND activo = true',
           [miembro.usuario_id, adulto_mayor_id]
         );
         if (existente.rows.length === 0) {
-          const esPrincipal = miembro.usuario_id === usuarioId; // el usuario que crea/edita es el principal
-          await client.query(`
-            INSERT INTO familiares (usuario_id, adulto_mayor_id, es_principal, rol_familiar, parentesco, creado_en)
-            VALUES ($1, $2, $3, 'familiar', 'Familiar', NOW())
-          `, [miembro.usuario_id, adulto_mayor_id, esPrincipal]);
+          // Intentar reactivar si existe inactivo
+          const inactivo = await client.query(
+            'SELECT id FROM familiares WHERE usuario_id = $1 AND adulto_mayor_id = $2 AND activo = false',
+            [miembro.usuario_id, adulto_mayor_id]
+          );
+          if (inactivo.rows.length > 0) {
+            await client.query(`
+        UPDATE familiares SET activo = true, actualizado_en = NOW()
+        WHERE id = $1
+      `, [inactivo.rows[0].id]);
+          } else {
+            // Insertar nuevo
+            const esPrincipal = miembro.usuario_id === usuarioId; // el usuario que crea/edita es el principal
+            await client.query(`
+        INSERT INTO familiares (usuario_id, adulto_mayor_id, es_principal, rol_familiar, parentesco, activo, creado_en)
+        VALUES ($1, $2, $3, 'familiar', 'Familiar', true, NOW())
+      `, [miembro.usuario_id, adulto_mayor_id, esPrincipal]);
+          }
         }
       }
       // ============================================================ 
@@ -1972,6 +1981,70 @@ export const obtenerAdultoMayor = async (usuarioId) => {
   }
 };
 
+/**
+ * Asigna el adulto mayor principal del grupo al usuario especificado en la tabla familiares.
+ * Si el usuario ya tiene un adulto mayor activo en el grupo, no hace nada.
+ * Si el grupo no tiene adulto mayor, no hace nada.
+ */
+export const asignarAdultoMayorDelGrupoAUsuario = async (grupo_familiar_id, usuario_id) => {
+  let client;
+  try {
+    client = await pool.connect();
+
+    // 1. Verificar si el usuario ya tiene un adulto mayor activo en este grupo
+    const yaTieneQuery = `
+      SELECT f.id FROM familiares f
+      JOIN adultos_mayores am ON f.adulto_mayor_id = am.id
+      WHERE f.usuario_id = $1 AND am.grupo_familiar_id = $2 AND f.activo = true
+    `;
+    const yaTieneResult = await client.query(yaTieneQuery, [usuario_id, grupo_familiar_id]);
+    if (yaTieneResult.rows.length > 0) {
+      console.log(`El usuario ${usuario_id} ya tiene adulto mayor asignado en el grupo ${grupo_familiar_id}`);
+      return;
+    }
+
+    // 2. Obtener el adulto mayor principal del grupo (el primero creado, o cualquier activo)
+    const adultoQuery = `
+      SELECT id FROM adultos_mayores
+      WHERE grupo_familiar_id = $1 AND activo = true
+      ORDER BY creado_en ASC
+      LIMIT 1
+    `;
+    const adultoResult = await client.query(adultoQuery, [grupo_familiar_id]);
+    if (adultoResult.rows.length === 0) {
+      console.log(`El grupo ${grupo_familiar_id} no tiene adulto mayor asignado aún`);
+      return;
+    }
+    const adulto_mayor_id = adultoResult.rows[0].id;
+
+    // 3. Insertar en familiares (o reactivar si existe inactivo)
+    const checkInactivoQuery = `
+      SELECT id FROM familiares
+      WHERE usuario_id = $1 AND adulto_mayor_id = $2 AND activo = false
+    `;
+    const checkResult = await client.query(checkInactivoQuery, [usuario_id, adulto_mayor_id]);
+    if (checkResult.rows.length > 0) {
+      // Reactivar
+      await client.query(`
+        UPDATE familiares SET activo = true, actualizado_en = NOW()
+        WHERE id = $1
+      `, [checkResult.rows[0].id]);
+    } else {
+      // Insertar nuevo
+      await client.query(`
+        INSERT INTO familiares (usuario_id, adulto_mayor_id, es_principal, rol_familiar, parentesco, activo, creado_en)
+        VALUES ($1, $2, false, 'familiar', 'Familiar', true, NOW())
+      `, [usuario_id, adulto_mayor_id]);
+    }
+    console.log(`✅ Usuario ${usuario_id} asociado al adulto mayor ${adulto_mayor_id} del grupo ${grupo_familiar_id}`);
+  } catch (error) {
+    console.error('❌ Error en asignarAdultoMayorDelGrupoAUsuario:', error.message);
+    throw error;
+  } finally {
+    if (client) client.release();
+  }
+};
+
 
 
 // ==================== EXPORTACIÓN ====================
@@ -1981,6 +2054,7 @@ export default {
   obtenerGrupoFamiliar,
   obtenerCodigoFamiliar,
   regenerarCodigoFamiliar,
+  asignarAdultoMayorDelGrupoAUsuario,
 
   // Familiares
   obtenerFamiliares,

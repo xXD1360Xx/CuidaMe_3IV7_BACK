@@ -262,14 +262,12 @@ export const iniciarSesionConCodigoFamiliar = async (email, contrasena, codigoFa
     }
 
     await client.query(`
-      INSERT INTO usuario_grupo (
-        usuario_id,
-        grupo_familiar_id,
-        rol_en_grupo,
-        estado,
-        fecha_unio
-      ) VALUES ($1, $2, 'familiar', 'activo', NOW())
+      INSERT INTO usuario_grupo (usuario_id, grupo_familiar_id, rol_en_grupo, estado, fecha_unio)
+      VALUES ($1, $2, 'familiar', 'activo', NOW())
     `, [usuario.id, grupo.id]);
+
+    // ✅ Asignar adulto mayor del grupo al usuario recién unido
+    await asignarAdultoMayorDelGrupoAUsuario(grupo.id, usuario.id);
 
     const tokenActualizado = jwt.sign(
       {
@@ -404,6 +402,8 @@ export const iniciarSesionConCodigoPersonalizado = async (codigo_personalizado) 
       ON CONFLICT (usuario_id, grupo_familiar_id) 
       DO UPDATE SET estado = 'activo', rol_en_grupo = EXCLUDED.rol_en_grupo
     `, [usuarioId, grupo_familiar_id, rol_asignado === 'familiar_admin' ? 'admin' : 'familiar']);
+
+    await asignarAdultoMayorDelGrupoAUsuario(grupo_familiar_id, usuarioId);
 
     // 5. Asociar usuario al adulto mayor (familiares)
     if (adulto_mayor_id) {
