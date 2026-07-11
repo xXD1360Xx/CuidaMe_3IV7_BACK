@@ -407,22 +407,6 @@ export const iniciarSesionConCodigoPersonalizado = async (codigo_personalizado) 
 
     await asignarAdultoMayorDelGrupoAUsuario(grupo_familiar_id, usuarioId);
 
-    // 5. Asociar usuario al adulto mayor (familiares)
-    if (adulto_mayor_id) {
-      const familiarCheck = await client.query(
-        'SELECT id FROM familiares WHERE usuario_id = $1 AND adulto_mayor_id = $2',
-        [usuarioId, adulto_mayor_id]
-      );
-      if (familiarCheck.rows.length === 0) {
-        await client.query(`
-          INSERT INTO familiares (usuario_id, adulto_mayor_id, es_principal, rol_familiar, parentesco, creado_en)
-          VALUES ($1, $2, $3, $4, $5, NOW())
-        `, [usuarioId, adulto_mayor_id, false, rol_asignado, parentesco]);
-      }
-    } else {
-      console.warn('⚠️ No se encontró adulto_mayor_id para el grupo. El usuario no tendrá adulto mayor asociado.');
-    }
-
     // 6. Incrementar usos del código personalizado
     await client.query(`
   UPDATE codigos_personalizados
