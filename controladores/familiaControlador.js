@@ -779,6 +779,10 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
 /**
  * 7. Eliminar familiar del grupo (solo administradores)
  */
+/**
+ * 7. Eliminar familiar del grupo (solo administradores)
+ * ✅ Permite eliminar a otro administrador solo si el admin actual es el creador del grupo
+ */
 export const eliminarFamiliar = async (adminId, familiarId) => {
   let client;
 
@@ -789,7 +793,7 @@ export const eliminarFamiliar = async (adminId, familiarId) => {
 
     // Verificar permisos del administrador
     const permisoCheck = await client.query(`
-      SELECT ug.grupo_familiar_id 
+      SELECT ug.grupo_familiar_id, ug.rol_en_grupo
       FROM usuario_grupo ug
       WHERE ug.usuario_id = $1 
         AND ug.rol_en_grupo IN ('admin', 'responsable')
@@ -824,21 +828,45 @@ export const eliminarFamiliar = async (adminId, familiarId) => {
 
     const familiarData = familiarCheck.rows[0];
 
-    // No permitir eliminar administradores
+    // Si el familiar es administrador
     if (familiarData.rol_en_grupo === 'admin') {
-      // Contar cuántos administradores quedan
+      // Verificar si el adminId es el creador del grupo
+      const creadorCheck = await client.query(`
+        SELECT usuario_admin_id FROM grupos_familiares WHERE id = $1
+      `, [grupoId]);
+
+      if (creadorCheck.rows.length === 0) {
+        return {
+          exito: false,
+          error: 'Grupo no encontrado',
+          codigo: 'GRUPO_NO_ENCONTRADO'
+        };
+      }
+
+      const creadorId = creadorCheck.rows[0].usuario_admin_id;
+
+      if (adminId !== creadorId) {
+        return {
+          exito: false,
+          error: 'No puedes eliminar a otro administrador. Solo el creador del grupo puede hacerlo.',
+          codigo: 'NO_PERMISO_ELIMINAR_ADMIN'
+        };
+      }
+
+      // Contar cuántos administradores quedan después de eliminar
       const adminCount = await client.query(`
         SELECT COUNT(*) 
         FROM usuario_grupo 
         WHERE grupo_familiar_id = $1 
           AND rol_en_grupo = 'admin'
           AND estado = 'activo'
-      `, [grupoId]);
+          AND usuario_id != $2
+      `, [grupoId, familiarId]);
 
-      if (parseInt(adminCount.rows[0].count) <= 1) {
+      if (parseInt(adminCount.rows[0].count) === 0) {
         return {
           exito: false,
-          error: 'No puedes eliminar al único administrador del grupo',
+          error: 'No puedes eliminar al último administrador del grupo',
           codigo: 'UNICO_ADMIN'
         };
       }
