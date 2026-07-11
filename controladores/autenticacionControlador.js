@@ -195,10 +195,10 @@ export const iniciarSesionConCodigoFamiliar = async (email, contrasena, codigoFa
 
     const codigoLimpio = codigoFamiliar.replace(/-/g, '').toUpperCase();
 
-    if (codigoLimpio.length !== 6) {
+    if (codigoLimpio.length !== 4) {
       return {
         exito: false,
-        error: 'El código familiar debe tener 6 caracteres',
+        error: 'El código familiar debe tener 4 caracteres',
         codigo: 'CODIGO_LONGITUD_INVALIDA'
       };
     }
