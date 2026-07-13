@@ -21,7 +21,8 @@ const esAdministradorDelGrupo = async (client, usuarioId, grupoId) => {
   const { rol_en_grupo, rol } = result.rows[0];
   return rol_en_grupo === 'admin' || rol === 'familiar_admin' || rol === 'familiar_administrador';
 };
-
+const fechaExpiracion = new Date();
+fechaExpiracion.setDate(fechaExpiracion.getDate() + 7);
 // ==================== FUNCIONES DE GRUPOS FAMILIARES ====================
 
 /**
@@ -111,7 +112,8 @@ export const obtenerGrupoFamiliar = async (usuarioId) => {
 };
 
 /**
- * 2. Obtener código familiar (solo administradores)
+ * 2. Obtener código familiar (ACCESIBLE PARA TODOS LOS MIEMBROS DEL GRUPO)
+ * ✅ Ahora cualquier miembro del grupo puede ver el código
  */
 export const obtenerCodigoFamiliar = async (usuarioId) => {
   let client;
@@ -120,28 +122,19 @@ export const obtenerCodigoFamiliar = async (usuarioId) => {
     client = await pool.connect();
 
     const grupoQuery = `
-      SELECT gf.id, gf.codigo_familiar, ug.rol_en_grupo, u.rol as rol_usuario
+      SELECT gf.id, gf.codigo_familiar
       FROM usuario_grupo ug
       JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
-      JOIN usuarios u ON u.id = ug.usuario_id
       WHERE ug.usuario_id = $1 
         AND ug.estado = 'activo'
         AND gf.activo = true
     `;
     const grupoResult = await client.query(grupoQuery, [usuarioId]);
     if (grupoResult.rows.length === 0) {
-      return { exito: false, error: 'No perteneces a ningún grupo familiar', codigo: 'SIN_GRUPO' };
+      return { exito: false, error: 'No perteneces a ningún grupo familiar activo', codigo: 'SIN_GRUPO' };
     }
 
     const grupo = grupoResult.rows[0];
-    const esAdmin = grupo.rol_en_grupo === 'admin' ||
-      grupo.rol_usuario === 'familiar_admin' ||
-      grupo.rol_usuario === 'familiar_administrador';
-
-    if (!esAdmin) {
-      return { exito: false, error: 'Solo los administradores pueden ver el código familiar', codigo: 'SIN_PERMISOS' };
-    }
-
     return { exito: true, codigo: grupo.codigo_familiar, mensaje: 'Código familiar obtenido exitosamente' };
   } catch (error) {
     console.error('❌ Error en obtenerCodigoFamiliar:', error.message);
@@ -1421,7 +1414,7 @@ export const salirDelGrupoFamiliar = async (usuarioId) => {
 
 export default {
   obtenerGrupoFamiliar,
-  obtenerCodigoFamiliar,
+  obtenerCodigoFamiliar,   // ✅ Ahora accesible para todos
   regenerarCodigoFamiliar,
   obtenerFamiliares,
   crearFamiliar,
@@ -1436,6 +1429,5 @@ export default {
   unirseAGrupoFamiliar,
   eliminarGrupoFamiliar,
   salirDelGrupoFamiliar,
-  asignarAdultoMayorDelGrupoAUsuario,
-  esAdministradorDelGrupo
+  asignarAdultoMayorDelGrupoAUsuario
 };
