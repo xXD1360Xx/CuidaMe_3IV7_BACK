@@ -339,7 +339,7 @@ export const iniciarSesionConCodigoPersonalizado = async (codigo_personalizado) 
 
     client = await pool.connect();
 
-    // 1. Buscar el código personalizado activo
+    // 1. Buscar el código personalizado activo (incluyendo usuario_asignado)
     const codigoQuery = `
       SELECT 
         cp.*, 
@@ -366,57 +366,74 @@ export const iniciarSesionConCodigoPersonalizado = async (codigo_personalizado) 
     const codigo = codigoResult.rows[0];
     const {
       nombre, apellido, email, parentesco, rol_asignado,
-      grupo_familiar_id, adulto_mayor_id
+      grupo_familiar_id, adulto_mayor_id, usuario_asignado
     } = codigo;
 
-    // 2. Verificar si el usuario ya existe (por email si está disponible)
     let usuarioId = null;
-    if (email) {
+
+    // ============================================================
+    // 🔥 PASO CLAVE: Si el código YA tiene un usuario asignado, USAR ESE USUARIO
+    // ============================================================
+    if (usuario_asignado) {
+      // Verificar que el usuario existe y está activo
       const userCheck = await client.query(
-        'SELECT id FROM usuarios WHERE email = $1 AND estado = $2',
-        [email, 'activo']
+        'SELECT id FROM usuarios WHERE id = $1 AND estado = $2',
+        [usuario_asignado, 'activo']
       );
-      if (userCheck.rows.length > 0) {
-        usuarioId = userCheck.rows[0].id;
+      if (userCheck.rows.length === 0) {
+        return {
+          exito: false,
+          error: 'El usuario asociado a este código ya no está activo',
+          codigo: 'USUARIO_INACTIVO'
+        };
       }
-    }
+      usuarioId = usuario_asignado;
+      console.log(`✅ Código ya asignado al usuario ${usuarioId}, usando ese usuario.`);
+    } else {
+      // ============================================================
+      // El código NO tiene usuario asignado → buscar por email o crear
+      // ============================================================
+      // 2. Verificar si el usuario ya existe (por email si está disponible)
+      if (email) {
+        const userCheck = await client.query(
+          'SELECT id FROM usuarios WHERE email = $1 AND estado = $2',
+          [email, 'activo']
+        );
+        if (userCheck.rows.length > 0) {
+          usuarioId = userCheck.rows[0].id;
+        }
+      }
 
-    // 3. Si no existe, crear usuario con los datos del código
-    if (!usuarioId) {
-      const passwordTemp = Math.random().toString(36).slice(-8);
-      const passwordHash = crypto.createHash('sha256').update(passwordTemp).digest('hex').toLowerCase();
+      // 3. Si no existe, crear usuario con los datos del código
+      if (!usuarioId) {
+        const passwordTemp = Math.random().toString(36).slice(-8);
+        const passwordHash = crypto.createHash('sha256').update(passwordTemp).digest('hex').toLowerCase();
 
-      const insertUser = await client.query(`
-        INSERT INTO usuarios (
-          nombre, apellido, email, password, rol, estado, 
-          necesita_completar_perfil, creado_en
-        ) VALUES ($1, $2, $3, $4, $5, 'activo', false, NOW())
-        RETURNING id
-      `, [nombre, apellido, email || null, passwordHash, rol_asignado || 'familiar']);
+        const insertUser = await client.query(`
+          INSERT INTO usuarios (
+            nombre, apellido, email, password, rol, estado, 
+            necesita_completar_perfil, creado_en
+          ) VALUES ($1, $2, $3, $4, $5, 'activo', false, NOW())
+          RETURNING id
+        `, [nombre, apellido, email || null, passwordHash, rol_asignado || 'familiar']);
 
-      usuarioId = insertUser.rows[0].id;
-    }
+        usuarioId = insertUser.rows[0].id;
+        console.log(`✅ Usuario ${usuarioId} creado desde el código.`);
+      }
 
-    // ============================================================
-    // 🔥 BLOQUE DE ACTUALIZACIÓN DE usuario_asignado (AGREGADO)
-    // ============================================================
-    // Verificar si el código ya está asignado a otro usuario
-    if (codigo.usuario_asignado !== null && codigo.usuario_asignado !== usuarioId) {
-      return {
-        exito: false,
-        error: 'Este código personalizado ya está en uso por otro usuario',
-        codigo: 'CODIGO_YA_ASIGNADO'
-      };
-    }
-
-    // Asignar el código al usuario actual si es null
-    if (codigo.usuario_asignado === null) {
+      // ============================================================
+      // 🔥 ASIGNAR el código al usuario (solo si no tenía usuario_asignado)
+      // ============================================================
       await client.query(`
         UPDATE codigos_personalizados 
         SET usuario_asignado = $1, actualizado_en = NOW()
         WHERE id = $2
       `, [usuarioId, codigo.id]);
+      console.log(`✅ Código asignado al usuario ${usuarioId}.`);
     }
+
+    // ============================================================
+    // A partir de aquí, el flujo es el mismo: asociar a grupo, adulto mayor, etc.
     // ============================================================
 
     // 4. Asociar usuario al grupo familiar (usuario_grupo)
@@ -427,10 +444,10 @@ export const iniciarSesionConCodigoPersonalizado = async (codigo_personalizado) 
       DO UPDATE SET estado = 'activo', rol_en_grupo = EXCLUDED.rol_en_grupo
     `, [usuarioId, grupo_familiar_id, rol_asignado === 'familiar_admin' ? 'admin' : 'familiar']);
 
-    // 5. Asignar adulto mayor del grupo al usuario (función centralizada)
+    // 5. Asignar adulto mayor del grupo al usuario
     await asignarAdultoMayorDelGrupoAUsuario(grupo_familiar_id, usuarioId);
 
-    // 6. Incrementar usos del código personalizado
+    // 6. Incrementar usos del código personalizado (siempre, para estadísticas)
     await client.query(`
       UPDATE codigos_personalizados
       SET usos_actuales = usos_actuales + 1, actualizado_en = NOW()
@@ -471,7 +488,6 @@ export const iniciarSesionConCodigoPersonalizado = async (codigo_personalizado) 
 
     const usuario = userDataResult.rows[0];
 
-    // Construir objeto de respuesta
     const usuarioRespuesta = {
       id: usuario.id,
       nombre: usuario.nombre,
