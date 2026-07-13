@@ -8,19 +8,18 @@ import { pool } from '../configuracion/basedeDatos.js';
  */
 export const obtenerAdultoMayorPrincipal = async (usuarioId) => {
   let client;
-
   try {
-    console.log('👵 [INFO ADULTO] Obteniendo información del adulto mayor principal para usuario ID:', usuarioId);
-
+    console.log('👵 [INFO ADULTO] Obteniendo información del adulto mayor para usuario ID:', usuarioId);
     client = await pool.connect();
 
-    // Obtener el adulto mayor principal del usuario
     const query = `
       SELECT am.*, f.es_principal, f.rol_familiar
       FROM adultos_mayores am
       INNER JOIN familiares f ON am.id = f.adulto_mayor_id
       WHERE f.usuario_id = $1
-        AND f.es_principal = true
+        AND f.activo = true
+        AND am.activo = true
+      ORDER BY f.es_principal DESC  -- Prioriza el principal si existe
       LIMIT 1
     `;
 
@@ -29,11 +28,10 @@ export const obtenerAdultoMayorPrincipal = async (usuarioId) => {
     if (result.rows.length === 0) {
       return {
         exito: false,
-        error: 'No se encontró un adulto mayor principal asociado',
+        error: 'No se encontró un adulto mayor asociado',
         codigo: 'ADULTO_NO_ENCONTRADO'
       };
     }
-
     const adultoMayor = result.rows[0];
 
     // Obtener información relacionada

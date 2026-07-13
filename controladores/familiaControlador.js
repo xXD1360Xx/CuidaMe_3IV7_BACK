@@ -919,7 +919,7 @@ export const asignarAdultoMayorDelGrupoAUsuario = async (grupo_familiar_id, usua
   try {
     client = await pool.connect();
 
-    // 1. Obtener el adulto mayor activo del grupo (el primero creado)
+    // 1. Obtener el adulto mayor activo del grupo
     const adultoQuery = `
       SELECT id FROM adultos_mayores
       WHERE grupo_familiar_id = $1 AND activo = true
@@ -954,9 +954,9 @@ export const asignarAdultoMayorDelGrupoAUsuario = async (grupo_familiar_id, usua
       }
     }
 
-    // 3. No existe, insertar nuevo registro
+    // 3. No existe, insertar nuevo registro (USANDO fecha_registro, no creado_en)
     await client.query(`
-      INSERT INTO familiares (usuario_id, adulto_mayor_id, es_principal, rol_familiar, parentesco, activo, creado_en)
+      INSERT INTO familiares (usuario_id, adulto_mayor_id, es_principal, rol_familiar, parentesco, activo, fecha_registro)
       VALUES ($1, $2, false, 'familiar', 'Familiar', true, NOW())
     `, [usuario_id, adulto_mayor_id]);
 
