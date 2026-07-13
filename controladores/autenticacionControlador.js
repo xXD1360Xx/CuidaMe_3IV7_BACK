@@ -397,6 +397,28 @@ export const iniciarSesionConCodigoPersonalizado = async (codigo_personalizado) 
       usuarioId = insertUser.rows[0].id;
     }
 
+    // ============================================================
+    // 🔥 BLOQUE DE ACTUALIZACIÓN DE usuario_asignado (AGREGADO)
+    // ============================================================
+    // Verificar si el código ya está asignado a otro usuario
+    if (codigo.usuario_asignado !== null && codigo.usuario_asignado !== usuarioId) {
+      return {
+        exito: false,
+        error: 'Este código personalizado ya está en uso por otro usuario',
+        codigo: 'CODIGO_YA_ASIGNADO'
+      };
+    }
+
+    // Asignar el código al usuario actual si es null
+    if (codigo.usuario_asignado === null) {
+      await client.query(`
+        UPDATE codigos_personalizados 
+        SET usuario_asignado = $1, actualizado_en = NOW()
+        WHERE id = $2
+      `, [usuarioId, codigo.id]);
+    }
+    // ============================================================
+
     // 4. Asociar usuario al grupo familiar (usuario_grupo)
     await client.query(`
       INSERT INTO usuario_grupo (usuario_id, grupo_familiar_id, rol_en_grupo, estado, fecha_unio)
@@ -405,14 +427,15 @@ export const iniciarSesionConCodigoPersonalizado = async (codigo_personalizado) 
       DO UPDATE SET estado = 'activo', rol_en_grupo = EXCLUDED.rol_en_grupo
     `, [usuarioId, grupo_familiar_id, rol_asignado === 'familiar_admin' ? 'admin' : 'familiar']);
 
+    // 5. Asignar adulto mayor del grupo al usuario (función centralizada)
     await asignarAdultoMayorDelGrupoAUsuario(grupo_familiar_id, usuarioId);
 
     // 6. Incrementar usos del código personalizado
     await client.query(`
-  UPDATE codigos_personalizados
-  SET usos_actuales = usos_actuales + 1, actualizado_en = NOW()
-  WHERE id = $1
-`, [codigo.id]);
+      UPDATE codigos_personalizados
+      SET usos_actuales = usos_actuales + 1, actualizado_en = NOW()
+      WHERE id = $1
+    `, [codigo.id]);
 
     // 7. Generar token JWT
     const token = jwt.sign(
@@ -428,8 +451,7 @@ export const iniciarSesionConCodigoPersonalizado = async (codigo_personalizado) 
       { expiresIn: JWT_EXPIRES_IN }
     );
 
-
-    // Después de asociar a usuario_grupo y familiares, obtener datos completos
+    // 8. Obtener datos completos del usuario para la respuesta
     const userDataResult = await client.query(`
       SELECT 
         u.id, u.nombre, u.apellido, u.email, u.rol, u.estado, 
@@ -449,7 +471,7 @@ export const iniciarSesionConCodigoPersonalizado = async (codigo_personalizado) 
 
     const usuario = userDataResult.rows[0];
 
-    // Construir objeto de respuesta con grupo
+    // Construir objeto de respuesta
     const usuarioRespuesta = {
       id: usuario.id,
       nombre: usuario.nombre,
@@ -459,12 +481,11 @@ export const iniciarSesionConCodigoPersonalizado = async (codigo_personalizado) 
       fecha_nacimiento: usuario.fecha_nacimiento,
       genero: usuario.genero,
       parentesco: usuario.parentesco,
-      tiene_adulto_mayor: usuario.tiene_adulto_mayor,   // <--- NUEVO
+      tiene_adulto_mayor: usuario.tiene_adulto_mayor,
       grupo_familiar: usuario.grupo_familiar_id ? {
         id: usuario.grupo_familiar_id,
         codigo: usuario.codigo_familiar,
         nombre: usuario.nombre_grupo
-        // ya no hace falta `tiene_adulto_mayor` aquí porque está arriba
       } : null,
       adulto_mayor: usuario.adulto_mayor_id ? {
         id: usuario.adulto_mayor_id,
@@ -478,7 +499,6 @@ export const iniciarSesionConCodigoPersonalizado = async (codigo_personalizado) 
       usuario: usuarioRespuesta,
       mensaje: 'Inicio de sesión con código personalizado exitoso'
     };
-
 
   } catch (error) {
     console.error('❌ Error en iniciarSesionConCodigoPersonalizado:', error.message);

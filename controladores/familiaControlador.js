@@ -1,100 +1,52 @@
-// controladores/familiaControlador.js - Controlador de Gestión Familiar (CORREGIDO Y UNIFICADO)
+// controladores/familiaControlador.js - Gestión Familiar (CORREGIDO FINAL)
 import { pool } from '../configuracion/basedeDatos.js';
 import crypto from 'crypto';
 import { crearNotificacion, notificarAFamiliares } from './notificacionesControlador.js';
 
-// ==================== FUNCIÓN AUXILIAR DE PERMISOS ====================
-
-/**
- * Verifica si un usuario es administrador del grupo
- * Considera tanto rol_en_grupo como el rol en usuarios
- */
-const esAdministradorDelGrupo = async (client, usuarioId, grupoId) => {
-  const query = `
-    SELECT ug.rol_en_grupo, u.rol
-    FROM usuario_grupo ug
-    JOIN usuarios u ON ug.usuario_id = u.id
-    WHERE ug.usuario_id = $1 AND ug.grupo_familiar_id = $2 AND ug.estado = 'activo'
-  `;
-  const result = await client.query(query, [usuarioId, grupoId]);
-  if (result.rows.length === 0) return false;
-  const { rol_en_grupo, rol } = result.rows[0];
-  return rol_en_grupo === 'admin' || rol === 'familiar_admin' || rol === 'familiar_administrador';
-};
-
-/**
- * Obtiene el creador del grupo (usuario_admin_id)
- */
+// ==================== FUNCIÓN AUXILIAR ====================
 const obtenerCreadorGrupo = async (client, grupoId) => {
   const result = await client.query('SELECT usuario_admin_id FROM grupos_familiares WHERE id = $1', [grupoId]);
   return result.rows.length > 0 ? result.rows[0].usuario_admin_id : null;
 };
 
-// ==================== FUNCIONES DE GRUPOS FAMILIARES ====================
+// ==================== GRUPOS FAMILIARES ====================
 
-/**
- * 1. Obtener información del grupo familiar del usuario
- */
 export const obtenerGrupoFamiliar = async (usuarioId) => {
   let client;
   try {
-    console.log('👨‍👩‍👧‍👦 [FAMILIA] Obteniendo grupo familiar para usuario:', usuarioId);
     client = await pool.connect();
-
     const query = `
-      SELECT 
-        gf.id,
-        gf.codigo_familiar,
-        gf.nombre_grupo,
-        gf.descripcion,
-        gf.fecha_creacion,
-        gf.fecha_expiracion,
-        gf.activo,
-        gf.max_integrantes,
-        u_admin.id as admin_id,
-        u_admin.nombre as admin_nombre,
-        u_admin.email as admin_email,
-        u_admin.telefono as admin_telefono,
-        ug.rol_en_grupo,
-        COUNT(DISTINCT ug2.usuario_id) as total_miembros,
-        EXISTS(SELECT 1 FROM adultos_mayores am WHERE am.grupo_familiar_id = gf.id) as tiene_adulto_mayor
+      SELECT gf.id, gf.codigo_familiar, gf.nombre_grupo, gf.descripcion,
+             gf.fecha_creacion, gf.fecha_expiracion, gf.activo, gf.max_integrantes,
+             u_admin.id as admin_id, u_admin.nombre as admin_nombre,
+             u_admin.email as admin_email, u_admin.telefono as admin_telefono,
+             ug.rol_en_grupo,
+             COUNT(DISTINCT ug2.usuario_id) as total_miembros,
+             EXISTS(SELECT 1 FROM adultos_mayores am WHERE am.grupo_familiar_id = gf.id) as tiene_adulto_mayor
       FROM usuario_grupo ug
       JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
       JOIN usuarios u_admin ON gf.usuario_admin_id = u_admin.id
       LEFT JOIN usuario_grupo ug2 ON gf.id = ug2.grupo_familiar_id AND ug2.estado = 'activo'
-      WHERE ug.usuario_id = $1 
-        AND ug.estado = 'activo'
-        AND gf.activo = true
+      WHERE ug.usuario_id = $1 AND ug.estado = 'activo' AND gf.activo = true
       GROUP BY gf.id, u_admin.id, ug.rol_en_grupo
     `;
-
     const result = await client.query(query, [usuarioId]);
     if (result.rows.length === 0) {
       return { exito: false, error: 'No perteneces a ningún grupo familiar activo', codigo: 'SIN_GRUPO' };
     }
-
     const grupo = result.rows[0];
 
     const miembrosQuery = `
-      SELECT 
-        u.id, u.nombre, u.apellido, u.email, u.telefono, u.rol,
-        u.fecha_nacimiento, u.genero, u.parentesco, u.imagen_perfil,
-        u.estado as estado_usuario,
-        ug.rol_en_grupo, ug.fecha_unio, ug.estado as estado_en_grupo,
-        ua.nombre as invitado_por_nombre
+      SELECT u.id, u.nombre, u.apellido, u.email, u.telefono, u.rol,
+             u.fecha_nacimiento, u.genero, u.parentesco, u.imagen_perfil,
+             u.estado as estado_usuario,
+             ug.rol_en_grupo, ug.fecha_unio, ug.estado as estado_en_grupo,
+             ua.nombre as invitado_por_nombre
       FROM usuario_grupo ug
       JOIN usuarios u ON ug.usuario_id = u.id
       LEFT JOIN usuarios ua ON ug.invitado_por = ua.id
-      WHERE ug.grupo_familiar_id = $1 
-        AND ug.estado = 'activo'
-        AND u.estado = 'activo'
-      ORDER BY 
-        CASE ug.rol_en_grupo 
-          WHEN 'admin' THEN 1
-          WHEN 'responsable' THEN 2
-          ELSE 3
-        END,
-        u.nombre
+      WHERE ug.grupo_familiar_id = $1 AND ug.estado = 'activo' AND u.estado = 'activo'
+      ORDER BY CASE ug.rol_en_grupo WHEN 'admin' THEN 1 WHEN 'responsable' THEN 2 ELSE 3 END, u.nombre
     `;
     const miembrosResult = await client.query(miembrosQuery, [grupo.id]);
     grupo.miembros = miembrosResult.rows;
@@ -108,7 +60,6 @@ export const obtenerGrupoFamiliar = async (usuarioId) => {
       const adultoResult = await client.query(adultoMayorQuery, [grupo.id]);
       grupo.adulto_mayor = adultoResult.rows[0] || null;
     }
-
     return { exito: true, grupo, mensaje: 'Grupo familiar obtenido exitosamente' };
   } catch (error) {
     console.error('❌ Error en obtenerGrupoFamiliar:', error.message);
@@ -118,30 +69,20 @@ export const obtenerGrupoFamiliar = async (usuarioId) => {
   }
 };
 
-/**
- * 2. Obtener código familiar (ACCESIBLE PARA TODOS LOS MIEMBROS DEL GRUPO)
- */
 export const obtenerCodigoFamiliar = async (usuarioId) => {
   let client;
   try {
-    console.log('🔑 [FAMILIA] Obteniendo código familiar para usuario:', usuarioId);
     client = await pool.connect();
-
     const grupoQuery = `
       SELECT gf.id, gf.codigo_familiar
-      FROM usuario_grupo ug
-      JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
-      WHERE ug.usuario_id = $1 
-        AND ug.estado = 'activo'
-        AND gf.activo = true
+      FROM usuario_grupo ug JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
+      WHERE ug.usuario_id = $1 AND ug.estado = 'activo' AND gf.activo = true
     `;
-    const grupoResult = await client.query(grupoQuery, [usuarioId]);
-    if (grupoResult.rows.length === 0) {
+    const result = await client.query(grupoQuery, [usuarioId]);
+    if (result.rows.length === 0) {
       return { exito: false, error: 'No perteneces a ningún grupo familiar activo', codigo: 'SIN_GRUPO' };
     }
-
-    const grupo = grupoResult.rows[0];
-    return { exito: true, codigo: grupo.codigo_familiar, mensaje: 'Código familiar obtenido exitosamente' };
+    return { exito: true, codigo: result.rows[0].codigo_familiar, mensaje: 'Código familiar obtenido exitosamente' };
   } catch (error) {
     console.error('❌ Error en obtenerCodigoFamiliar:', error.message);
     return { exito: false, error: 'Error al obtener código familiar', codigo: 'ERROR_SERVIDOR' };
@@ -150,35 +91,24 @@ export const obtenerCodigoFamiliar = async (usuarioId) => {
   }
 };
 
-/**
- * 3. Regenerar código familiar (solo administradores)
- */
 export const regenerarCodigoFamiliar = async (usuarioId) => {
   let client;
   try {
-    console.log('🔄 [FAMILIA] Regenerando código familiar para usuario:', usuarioId);
     client = await pool.connect();
-
-    // Obtener grupo y verificar permisos
     const grupoQuery = `
       SELECT gf.id, gf.codigo_familiar, ug.rol_en_grupo, u.rol as rol_usuario
-      FROM usuario_grupo ug
-      JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
+      FROM usuario_grupo ug JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
       JOIN usuarios u ON u.id = ug.usuario_id
-      WHERE ug.usuario_id = $1 
-        AND ug.estado = 'activo'
-        AND gf.activo = true
+      WHERE ug.usuario_id = $1 AND ug.estado = 'activo' AND gf.activo = true
     `;
     const grupoResult = await client.query(grupoQuery, [usuarioId]);
     if (grupoResult.rows.length === 0) {
       return { exito: false, error: 'No perteneces a ningún grupo familiar', codigo: 'SIN_GRUPO' };
     }
-
     const grupo = grupoResult.rows[0];
     const esAdmin = grupo.rol_en_grupo === 'admin' ||
       grupo.rol_usuario === 'familiar_admin' ||
       grupo.rol_usuario === 'familiar_administrador';
-
     if (!esAdmin) {
       return { exito: false, error: 'No tienes permisos para regenerar el código', codigo: 'SIN_PERMISOS' };
     }
@@ -204,15 +134,11 @@ export const regenerarCodigoFamiliar = async (usuarioId) => {
     const fechaExpiracion = new Date();
     fechaExpiracion.setDate(fechaExpiracion.getDate() + 7);
     await client.query(`
-      UPDATE grupos_familiares 
-      SET codigo_familiar = $1, fecha_expiracion = $2, actualizado_en = NOW()
-      WHERE id = $3
+      UPDATE grupos_familiares SET codigo_familiar = $1, fecha_expiracion = $2, actualizado_en = NOW() WHERE id = $3
     `, [codigo, fechaExpiracion, grupo.id]);
 
-    // Inactivar códigos personalizados anteriores
     await client.query(`
-      UPDATE codigos_personalizados SET activo = false, actualizado_en = NOW()
-      WHERE grupo_familiar_id = $1
+      UPDATE codigos_personalizados SET activo = false, actualizado_en = NOW() WHERE grupo_familiar_id = $1
     `, [grupo.id]);
 
     return { exito: true, codigo, fechaExpiracion, mensaje: 'Código familiar regenerado exitosamente' };
@@ -224,49 +150,29 @@ export const regenerarCodigoFamiliar = async (usuarioId) => {
   }
 };
 
-// ==================== FUNCIONES DE MIEMBROS DE LA FAMILIA ====================
+// ==================== MIEMBROS ====================
 
-/**
- * 4. Obtener todos los familiares del grupo
- */
 export const obtenerFamiliares = async (usuarioId) => {
   let client;
   try {
-    console.log('👥 [FAMILIA] Obteniendo familiares para usuario:', usuarioId);
     client = await pool.connect();
-
-    const grupoQuery = `
-      SELECT ug.grupo_familiar_id
-      FROM usuario_grupo ug
-      WHERE ug.usuario_id = $1 AND ug.estado = 'activo'
-    `;
+    const grupoQuery = `SELECT ug.grupo_familiar_id FROM usuario_grupo ug WHERE ug.usuario_id = $1 AND ug.estado = 'activo'`;
     const grupoResult = await client.query(grupoQuery, [usuarioId]);
     if (grupoResult.rows.length === 0) {
       return { exito: false, error: 'Usuario no pertenece a ningún grupo familiar', codigo: 'SIN_GRUPO' };
     }
-
     const grupoId = grupoResult.rows[0].grupo_familiar_id;
 
     const familiaresQuery = `
-      SELECT 
-        u.id, u.nombre, u.apellido, u.email, u.telefono, u.rol,
-        u.fecha_nacimiento, u.genero, u.parentesco, u.imagen_perfil,
-        u.estado as estado_usuario,
-        ug.rol_en_grupo, ug.fecha_unio, ug.estado as estado_en_grupo,
-        ua.nombre as invitado_por_nombre
-      FROM usuario_grupo ug
-      JOIN usuarios u ON ug.usuario_id = u.id
+      SELECT u.id, u.nombre, u.apellido, u.email, u.telefono, u.rol,
+             u.fecha_nacimiento, u.genero, u.parentesco, u.imagen_perfil,
+             u.estado as estado_usuario,
+             ug.rol_en_grupo, ug.fecha_unio, ug.estado as estado_en_grupo,
+             ua.nombre as invitado_por_nombre
+      FROM usuario_grupo ug JOIN usuarios u ON ug.usuario_id = u.id
       LEFT JOIN usuarios ua ON ug.invitado_por = ua.id
-      WHERE ug.grupo_familiar_id = $1 
-        AND ug.estado = 'activo'
-        AND u.estado = 'activo'
-      ORDER BY 
-        CASE ug.rol_en_grupo 
-          WHEN 'admin' THEN 1
-          WHEN 'responsable' THEN 2
-          ELSE 3
-        END,
-        u.nombre
+      WHERE ug.grupo_familiar_id = $1 AND ug.estado = 'activo' AND u.estado = 'activo'
+      ORDER BY CASE ug.rol_en_grupo WHEN 'admin' THEN 1 WHEN 'responsable' THEN 2 ELSE 3 END, u.nombre
     `;
     const familiaresResult = await client.query(familiaresQuery, [grupoId]);
 
@@ -292,43 +198,31 @@ export const obtenerFamiliares = async (usuarioId) => {
   }
 };
 
-/**
- * 5. Agregar familiar al grupo (solo administradores)
- */
 export const crearFamiliar = async (adminId, datosFamiliar) => {
   let client;
   try {
-    console.log('👥 [FAMILIA] Agregando familiar por administrador:', adminId);
-
-    const {
-      nombre, apellido, email, telefono, fecha_nacimiento,
-      genero, parentesco, rol = 'familiar_secundario', relacion_adulto_mayor = ''
-    } = datosFamiliar;
-
+    const { nombre, apellido, email, telefono, fecha_nacimiento,
+      genero, parentesco, rol = 'familiar_secundario', relacion_adulto_mayor = '' } = datosFamiliar;
     client = await pool.connect();
 
-    // Verificar permisos del administrador
+    // Verificar permisos
     const grupoCheck = await client.query(`
-      SELECT gf.id, gf.max_integrantes, 
-             COUNT(ug.usuario_id) as miembros_actuales,
+      SELECT gf.id, gf.max_integrantes, COUNT(ug.usuario_id) as miembros_actuales,
              ug.rol_en_grupo, u.rol as rol_usuario
       FROM grupos_familiares gf
       JOIN usuario_grupo ug ON gf.id = ug.grupo_familiar_id AND ug.estado = 'activo'
       JOIN usuarios u ON ug.usuario_id = u.id
-      WHERE ug.usuario_id = $1 
-        AND gf.activo = true
+      WHERE ug.usuario_id = $1 AND gf.activo = true
       GROUP BY gf.id, ug.rol_en_grupo, u.rol
     `, [adminId]);
 
     if (grupoCheck.rows.length === 0) {
       return { exito: false, error: 'No tienes permisos para agregar familiares', codigo: 'SIN_PERMISOS' };
     }
-
     const grupo = grupoCheck.rows[0];
     const esAdmin = grupo.rol_en_grupo === 'admin' ||
       grupo.rol_usuario === 'familiar_admin' ||
       grupo.rol_usuario === 'familiar_administrador';
-
     if (!esAdmin) {
       return { exito: false, error: 'No tienes permisos para agregar familiares', codigo: 'SIN_PERMISOS' };
     }
@@ -339,7 +233,6 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
     }
 
     let usuarioId, nuevoUsuario = false;
-
     if (email) {
       const usuarioResult = await client.query(
         'SELECT id FROM usuarios WHERE LOWER(email) = LOWER($1) AND estado = $2',
@@ -348,7 +241,7 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
       if (usuarioResult.rows.length > 0) {
         usuarioId = usuarioResult.rows[0].id;
         const enGrupoCheck = await client.query(
-          `SELECT id FROM usuario_grupo WHERE usuario_id = $1 AND grupo_familiar_id = $2 AND estado = $3`,
+          'SELECT id FROM usuario_grupo WHERE usuario_id = $1 AND grupo_familiar_id = $2 AND estado = $3',
           [usuarioId, grupoId, 'activo']
         );
         if (enGrupoCheck.rows.length > 0) {
@@ -365,21 +258,11 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
       const passwordHash = crypto.createHash('sha256').update(passwordTemporal).digest('hex').toLowerCase();
 
       const insertUsuarioQuery = `
-        INSERT INTO usuarios (
-          nombre, apellido, email, password, telefono, fecha_nacimiento,
-          genero, parentesco, rol, necesita_completar_perfil, estado, creado_en
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, false, 'activo', NOW())
+        INSERT INTO usuarios (nombre, apellido, email, password, telefono, fecha_nacimiento,
+                              genero, parentesco, rol, necesita_completar_perfil, estado, creado_en)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, false, 'activo', NOW())
         RETURNING id, nombre, email, telefono, rol
       `;
-      await notificarAFamiliares(
-        grupoId,
-        'familiar_nuevo',
-        `Se ha agregado un nuevo familiar: ${nombre} ${apellido || ''}`,
-        usuarioId,
-        'familiares',
-        adminId,
-        adminId
-      );
       const usuarioResult = await client.query(insertUsuarioQuery, [
         nombre, apellido || null, email || null, passwordHash, telefono || null,
         fecha_nacimiento || null, genero || null, parentesco || null, rol
@@ -396,10 +279,9 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
     };
 
     await client.query(`
-      INSERT INTO usuario_grupo (
-        usuario_id, grupo_familiar_id, rol_en_grupo, estado, permisos,
-        invitado_por, fecha_unio, relacion_adulto_mayor
-      ) VALUES ($1, $2, $3, 'activo', $4, $5, NOW(), $6)
+      INSERT INTO usuario_grupo (usuario_id, grupo_familiar_id, rol_en_grupo, estado, permisos,
+                                 invitado_por, fecha_unio, relacion_adulto_mayor)
+      VALUES ($1, $2, $3, 'activo', $4, $5, NOW(), $6)
     `, [
       usuarioId,
       grupoId,
@@ -409,7 +291,6 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
       relacion_adulto_mayor || null
     ]);
 
-    // Asignar adulto mayor automáticamente
     await asignarAdultoMayorDelGrupoAUsuario(grupoId, usuarioId);
 
     return {
@@ -430,51 +311,38 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
   }
 };
 
-/**
- * 6. Actualizar información de un familiar (solo administradores)
- * - No permite editar a otro administrador a menos que sea el creador del grupo
- */
 export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => {
   let client;
   try {
-    console.log('✏️ [FAMILIA] Actualizando familiar:', familiarId);
     client = await pool.connect();
 
     // Verificar permisos del administrador
     const permisoCheck = await client.query(`
       SELECT ug.grupo_familiar_id, ug.rol_en_grupo, u.rol as rol_usuario
-      FROM usuario_grupo ug
-      JOIN usuarios u ON ug.usuario_id = u.id
+      FROM usuario_grupo ug JOIN usuarios u ON ug.usuario_id = u.id
       WHERE ug.usuario_id = $1 AND ug.estado = 'activo'
     `, [adminId]);
-
     if (permisoCheck.rows.length === 0) {
       return { exito: false, error: 'No tienes permisos para actualizar familiares', codigo: 'SIN_PERMISOS' };
     }
-
     const permiso = permisoCheck.rows[0];
     const esAdmin = permiso.rol_en_grupo === 'admin' ||
       permiso.rol_usuario === 'familiar_admin' ||
       permiso.rol_usuario === 'familiar_administrador';
-
     if (!esAdmin) {
       return { exito: false, error: 'No tienes permisos para actualizar familiares', codigo: 'SIN_PERMISOS' };
     }
-
     const grupoId = permiso.grupo_familiar_id;
 
-    // Verificar que el familiar pertenece al mismo grupo
+    // Verificar que el familiar pertenece al grupo
     const familiarCheck = await client.query(`
       SELECT ug.id, ug.rol_en_grupo, u.rol as rol_usuario
-      FROM usuario_grupo ug
-      JOIN usuarios u ON ug.usuario_id = u.id
+      FROM usuario_grupo ug JOIN usuarios u ON ug.usuario_id = u.id
       WHERE ug.usuario_id = $1 AND ug.grupo_familiar_id = $2
     `, [familiarId, grupoId]);
-
     if (familiarCheck.rows.length === 0) {
       return { exito: false, error: 'El familiar no pertenece a tu grupo familiar', codigo: 'FAMILIAR_NO_ENCONTRADO' };
     }
-
     const familiar = familiarCheck.rows[0];
     const esFamiliarAdmin = familiar.rol_en_grupo === 'admin' ||
       familiar.rol_usuario === 'familiar_admin' ||
@@ -488,11 +356,10 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
       }
     }
 
-    // Preparar actualización (igual que antes)
+    // Preparar actualización
     const valores = [];
     const partesQuery = [];
     let contador = 1;
-
     const campos = [
       { nombre: 'nombre', valor: datosFamiliar.nombre },
       { nombre: 'apellido', valor: datosFamiliar.apellido },
@@ -502,7 +369,6 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
       { nombre: 'parentesco', valor: datosFamiliar.parentesco },
       { nombre: 'rol', valor: datosFamiliar.rol }
     ];
-
     campos.forEach(campo => {
       if (campo.valor !== undefined) {
         partesQuery.push(`${campo.nombre} = $${contador}`);
@@ -514,8 +380,7 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
     if (partesQuery.length > 0) {
       valores.push(familiarId);
       const query = `
-        UPDATE usuarios 
-        SET ${partesQuery.join(', ')}, actualizado_en = NOW()
+        UPDATE usuarios SET ${partesQuery.join(', ')}, actualizado_en = NOW()
         WHERE id = $${contador}
         RETURNING id, nombre, apellido, email, telefono, fecha_nacimiento,
                   genero, parentesco, rol, estado, creado_en, actualizado_en
@@ -530,32 +395,27 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
         rolEnGrupo = 'admin';
       }
       await client.query(`
-        UPDATE usuario_grupo 
-        SET rol_en_grupo = $1, actualizado_en = NOW()
+        UPDATE usuario_grupo SET rol_en_grupo = $1, actualizado_en = NOW()
         WHERE usuario_id = $2 AND grupo_familiar_id = $3
       `, [rolEnGrupo, familiarId, grupoId]);
     }
 
     if (datosFamiliar.relacion_adulto_mayor !== undefined) {
       await client.query(`
-        UPDATE usuario_grupo 
-        SET relacion_adulto_mayor = $1, actualizado_en = NOW()
+        UPDATE usuario_grupo SET relacion_adulto_mayor = $1, actualizado_en = NOW()
         WHERE usuario_id = $2 AND grupo_familiar_id = $3
       `, [datosFamiliar.relacion_adulto_mayor, familiarId, grupoId]);
     }
 
     const finalQuery = `
-      SELECT 
-        u.id, u.nombre, u.apellido, u.email, u.telefono,
-        u.fecha_nacimiento, u.genero, u.parentesco, u.rol, u.estado,
-        ug.rol_en_grupo, ug.relacion_adulto_mayor,
-        u.creado_en, u.actualizado_en
-      FROM usuarios u
-      JOIN usuario_grupo ug ON u.id = ug.usuario_id
+      SELECT u.id, u.nombre, u.apellido, u.email, u.telefono,
+             u.fecha_nacimiento, u.genero, u.parentesco, u.rol, u.estado,
+             ug.rol_en_grupo, ug.relacion_adulto_mayor,
+             u.creado_en, u.actualizado_en
+      FROM usuarios u JOIN usuario_grupo ug ON u.id = ug.usuario_id
       WHERE u.id = $1 AND ug.grupo_familiar_id = $2
     `;
     const finalResult = await client.query(finalQuery, [familiarId, grupoId]);
-
     return { exito: true, familiar: finalResult.rows[0], mensaje: 'Familiar actualizado exitosamente' };
   } catch (error) {
     console.error('❌ Error en actualizarFamiliar:', error.message);
@@ -565,49 +425,36 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
   }
 };
 
-/**
- * 7. Eliminar familiar del grupo (solo administradores)
- * - Cualquier admin puede eliminar a no-admins.
- * - Solo el creador del grupo puede eliminar a otro admin.
- */
 export const eliminarFamiliar = async (adminId, familiarId) => {
   let client;
   try {
-    console.log('🗑️ [FAMILIA] Eliminando familiar:', familiarId);
     client = await pool.connect();
 
     // Verificar permisos del administrador
     const permisoCheck = await client.query(`
       SELECT ug.grupo_familiar_id, ug.rol_en_grupo, u.rol as rol_usuario
-      FROM usuario_grupo ug
-      JOIN usuarios u ON ug.usuario_id = u.id
+      FROM usuario_grupo ug JOIN usuarios u ON ug.usuario_id = u.id
       WHERE ug.usuario_id = $1 AND ug.estado = 'activo'
     `, [adminId]);
-
     if (permisoCheck.rows.length === 0) {
       return { exito: false, error: 'No tienes permisos para eliminar familiares', codigo: 'SIN_PERMISOS' };
     }
-
     const permiso = permisoCheck.rows[0];
     const esAdmin = permiso.rol_en_grupo === 'admin' ||
       permiso.rol_usuario === 'familiar_admin' ||
       permiso.rol_usuario === 'familiar_administrador';
-
     if (!esAdmin) {
       return { exito: false, error: 'No tienes permisos para eliminar familiares', codigo: 'SIN_PERMISOS' };
     }
-
     const grupoId = permiso.grupo_familiar_id;
 
     const familiarCheck = await client.query(`
-      SELECT ug.id, ug.rol_en_grupo 
-      FROM usuario_grupo ug
-      WHERE ug.usuario_id = $1 AND ug.grupo_familiar_id = $2
+      SELECT ug.id, ug.rol_en_grupo
+      FROM usuario_grupo ug WHERE ug.usuario_id = $1 AND ug.grupo_familiar_id = $2
     `, [familiarId, grupoId]);
     if (familiarCheck.rows.length === 0) {
       return { exito: false, error: 'El familiar no pertenece a tu grupo familiar', codigo: 'FAMILIAR_NO_ENCONTRADO' };
     }
-
     const familiarData = familiarCheck.rows[0];
 
     // Si el familiar es administrador, solo el creador puede eliminarlo
@@ -616,14 +463,9 @@ export const eliminarFamiliar = async (adminId, familiarId) => {
       if (adminId !== creadorId) {
         return { exito: false, error: 'No puedes eliminar a otro administrador. Solo el creador del grupo puede hacerlo.', codigo: 'NO_PERMISO_ELIMINAR_ADMIN' };
       }
-
       const adminCount = await client.query(`
-        SELECT COUNT(*) 
-        FROM usuario_grupo 
-        WHERE grupo_familiar_id = $1 
-          AND rol_en_grupo = 'admin'
-          AND estado = 'activo'
-          AND usuario_id != $2
+        SELECT COUNT(*) FROM usuario_grupo
+        WHERE grupo_familiar_id = $1 AND rol_en_grupo = 'admin' AND estado = 'activo' AND usuario_id != $2
       `, [grupoId, familiarId]);
       if (parseInt(adminCount.rows[0].count) === 0) {
         return { exito: false, error: 'No puedes eliminar al último administrador del grupo', codigo: 'UNICO_ADMIN' };
@@ -631,8 +473,7 @@ export const eliminarFamiliar = async (adminId, familiarId) => {
     }
 
     await client.query(`
-      UPDATE usuario_grupo 
-      SET estado = 'inactivo', actualizado_en = NOW()
+      UPDATE usuario_grupo SET estado = 'inactivo', actualizado_en = NOW()
       WHERE usuario_id = $1 AND grupo_familiar_id = $2
     `, [familiarId, grupoId]);
 
@@ -645,64 +486,49 @@ export const eliminarFamiliar = async (adminId, familiarId) => {
   }
 };
 
-// ==================== FUNCIONES DE CÓDIGOS PERSONALIZADOS ====================
+// ==================== CÓDIGOS PERSONALIZADOS ====================
 
-/**
- * 8. Obtener códigos personalizados del grupo (solo administradores)
- * Incluye usuario_asignado para relacionar con miembros
- */
 export const obtenerCodigosPersonalizados = async (usuarioId) => {
   let client;
   try {
-    console.log('🔑 [FAMILIA] Obteniendo códigos personalizados para usuario:', usuarioId);
     client = await pool.connect();
-
-    // Verificar permisos usando la función auxiliar
     const grupoQuery = `
       SELECT gf.id, ug.rol_en_grupo, u.rol as rol_usuario
-      FROM usuario_grupo ug
-      JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
+      FROM usuario_grupo ug JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
       JOIN usuarios u ON u.id = ug.usuario_id
-      WHERE ug.usuario_id = $1 
-        AND ug.estado = 'activo'
-        AND gf.activo = true
+      WHERE ug.usuario_id = $1 AND ug.estado = 'activo' AND gf.activo = true
     `;
     const grupoResult = await client.query(grupoQuery, [usuarioId]);
     if (grupoResult.rows.length === 0) {
       return { exito: false, error: 'No perteneces a ningún grupo familiar', codigo: 'SIN_GRUPO' };
     }
-
     const grupo = grupoResult.rows[0];
     const esAdmin = grupo.rol_en_grupo === 'admin' ||
       grupo.rol_usuario === 'familiar_admin' ||
       grupo.rol_usuario === 'familiar_administrador';
-
     if (!esAdmin) {
       return { exito: false, error: 'No tienes permisos para ver códigos personalizados', codigo: 'SIN_PERMISOS' };
     }
-
     const grupoId = grupo.id;
 
     const codigosQuery = `
-      SELECT 
-        cp.id, cp.codigo, cp.nombre, cp.apellido, cp.parentesco,
-        cp.rol_asignado, cp.descripcion, cp.max_usos, cp.usos_actuales,
-        cp.fecha_expiracion, cp.activo, cp.creado_en, cp.actualizado_en,
-        cp.usuario_asignado,
-        u_creador.nombre as creador_nombre,
-        CASE 
-          WHEN cp.activo = false THEN 'inactivo'
-          WHEN cp.usos_actuales > 0 OR cp.usuario_asignado IS NOT NULL THEN 'en uso'
-          WHEN cp.max_usos IS NOT NULL AND cp.usos_actuales >= cp.max_usos THEN 'en uso'
-          ELSE 'pendiente'
-        END as estado
+      SELECT cp.id, cp.codigo, cp.nombre, cp.apellido, cp.parentesco,
+             cp.rol_asignado, cp.descripcion, cp.max_usos, cp.usos_actuales,
+             cp.fecha_expiracion, cp.activo, cp.creado_en, cp.actualizado_en,
+             cp.usuario_asignado,
+             u_creador.nombre as creador_nombre,
+             CASE
+               WHEN cp.activo = false THEN 'inactivo'
+               WHEN cp.usos_actuales > 0 OR cp.usuario_asignado IS NOT NULL THEN 'en uso'
+               WHEN cp.max_usos IS NOT NULL AND cp.usos_actuales >= cp.max_usos THEN 'en uso'
+               ELSE 'pendiente'
+             END as estado
       FROM codigos_personalizados cp
       JOIN usuarios u_creador ON cp.creado_por = u_creador.id
       WHERE cp.grupo_familiar_id = $1 AND cp.activo = true
       ORDER BY cp.creado_en DESC
     `;
     const codigosResult = await client.query(codigosQuery, [grupoId]);
-
     return {
       exito: true,
       codigos: codigosResult.rows,
@@ -717,49 +543,33 @@ export const obtenerCodigosPersonalizados = async (usuarioId) => {
   }
 };
 
-/**
- * 9. Crear código personalizado (solo administradores)
- */
 export const crearCodigoPersonalizado = async (usuarioId, datosCodigo) => {
   let client;
   try {
-    console.log('✨ [FAMILIA] Creando código personalizado para usuario:', usuarioId);
-
-    const {
-      nombre, apellido, parentesco, rol_asignado = 'familiar',
-      descripcion = '', max_usos = 1, fecha_expiracion = null
-    } = datosCodigo;
-
+    const { nombre, apellido, parentesco, rol_asignado = 'familiar',
+      descripcion = '', max_usos = 1, fecha_expiracion = null } = datosCodigo;
     if (!nombre) {
       return { exito: false, error: 'El nombre es requerido', codigo: 'NOMBRE_REQUERIDO' };
     }
-
     client = await pool.connect();
 
-    // Verificar permisos
     const grupoQuery = `
       SELECT gf.id, ug.rol_en_grupo, u.rol as rol_usuario
-      FROM usuario_grupo ug
-      JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
+      FROM usuario_grupo ug JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
       JOIN usuarios u ON u.id = ug.usuario_id
-      WHERE ug.usuario_id = $1 
-        AND ug.estado = 'activo'
-        AND gf.activo = true
+      WHERE ug.usuario_id = $1 AND ug.estado = 'activo' AND gf.activo = true
     `;
     const grupoResult = await client.query(grupoQuery, [usuarioId]);
     if (grupoResult.rows.length === 0) {
       return { exito: false, error: 'No perteneces a ningún grupo familiar', codigo: 'SIN_GRUPO' };
     }
-
     const grupo = grupoResult.rows[0];
     const esAdmin = grupo.rol_en_grupo === 'admin' ||
       grupo.rol_usuario === 'familiar_admin' ||
       grupo.rol_usuario === 'familiar_administrador';
-
     if (!esAdmin) {
       return { exito: false, error: 'No tienes permisos para crear códigos personalizados', codigo: 'SIN_PERMISOS' };
     }
-
     const grupoId = grupo.id;
 
     // Generar código único de 6 caracteres
@@ -769,10 +579,7 @@ export const crearCodigoPersonalizado = async (usuarioId, datosCodigo) => {
     while (!codigoUnico && intentos < 10) {
       codigo = '';
       for (let i = 0; i < 6; i++) codigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
-      const codigoCheck = await client.query(
-        'SELECT id FROM codigos_personalizados WHERE codigo = $1',
-        [codigo]
-      );
+      const codigoCheck = await client.query('SELECT id FROM codigos_personalizados WHERE codigo = $1', [codigo]);
       if (codigoCheck.rows.length === 0) codigoUnico = true;
       intentos++;
     }
@@ -785,18 +592,15 @@ export const crearCodigoPersonalizado = async (usuarioId, datosCodigo) => {
       : '{"ver_medicamentos": true, "ver_calendario": true}';
 
     const insertQuery = `
-      INSERT INTO codigos_personalizados (
-        grupo_familiar_id, codigo, nombre, apellido, parentesco,
-        rol_asignado, descripcion, creado_por, max_usos,
-        fecha_expiracion, activo, permisos, creado_en
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, NULL, true, $9, NOW())
+      INSERT INTO codigos_personalizados (grupo_familiar_id, codigo, nombre, apellido, parentesco,
+        rol_asignado, descripcion, creado_por, max_usos, fecha_expiracion, activo, permisos, creado_en)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, NULL, true, $9, NOW())
       RETURNING *
     `;
     const result = await client.query(insertQuery, [
       grupoId, codigo, nombre, apellido || null, parentesco || null,
       rol_asignado, descripcion, usuarioId, permisos
     ]);
-
     return { exito: true, codigo: result.rows[0], mensaje: 'Código personalizado creado exitosamente' };
   } catch (error) {
     console.error('❌ Error en crearCodigoPersonalizado:', error.message);
@@ -809,67 +613,48 @@ export const crearCodigoPersonalizado = async (usuarioId, datosCodigo) => {
   }
 };
 
-/**
- * 10. Eliminar código personalizado (solo administradores)
- */
 export const eliminarCodigoPersonalizado = async (usuarioId, codigoId) => {
   let client;
   try {
-    console.log('🗑️ [FAMILIA] Eliminando código personalizado:', codigoId);
     client = await pool.connect();
 
-    // Verificar permisos
     const grupoQuery = `
       SELECT gf.id, ug.rol_en_grupo, u.rol as rol_usuario
-      FROM usuario_grupo ug
-      JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
+      FROM usuario_grupo ug JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
       JOIN usuarios u ON u.id = ug.usuario_id
-      WHERE ug.usuario_id = $1 
-        AND ug.estado = 'activo'
-        AND gf.activo = true
+      WHERE ug.usuario_id = $1 AND ug.estado = 'activo' AND gf.activo = true
     `;
     const grupoResult = await client.query(grupoQuery, [usuarioId]);
     if (grupoResult.rows.length === 0) {
       return { exito: false, error: 'No perteneces a ningún grupo familiar', codigo: 'SIN_GRUPO' };
     }
-
     const grupo = grupoResult.rows[0];
     const esAdmin = grupo.rol_en_grupo === 'admin' ||
       grupo.rol_usuario === 'familiar_admin' ||
       grupo.rol_usuario === 'familiar_administrador';
-
     if (!esAdmin) {
       return { exito: false, error: 'No tienes permisos para eliminar códigos personalizados', codigo: 'SIN_PERMISOS' };
     }
-
     const grupoId = grupo.id;
 
     const codigoCheck = await client.query(`
-      SELECT id FROM codigos_personalizados 
-      WHERE id = $1 AND grupo_familiar_id = $2
+      SELECT id FROM codigos_personalizados WHERE id = $1 AND grupo_familiar_id = $2
     `, [codigoId, grupoId]);
     if (codigoCheck.rows.length === 0) {
       return { exito: false, error: 'Código no encontrado en tu grupo', codigo: 'CODIGO_NO_ENCONTRADO' };
     }
 
-    // Desvincular el código de cualquier usuario
     await client.query(`
-      UPDATE codigos_personalizados 
-      SET usuario_asignado = NULL 
-      WHERE id = $1
+      UPDATE codigos_personalizados SET usuario_asignado = NULL WHERE id = $1
     `, [codigoId]);
 
-    // Intentar eliminar el código (solo si no se ha usado)
     const deleteResult = await client.query(`
-      DELETE FROM codigos_personalizados 
-      WHERE id = $1 AND grupo_familiar_id = $2 AND usos_actuales = 0 AND usuario_asignado IS NULL
+      DELETE FROM codigos_personalizados WHERE id = $1 AND grupo_familiar_id = $2 AND usos_actuales = 0 AND usuario_asignado IS NULL
     `, [codigoId, grupoId]);
 
     if (deleteResult.rowCount === 0) {
-      // Si ya fue usado, desactivarlo
       await client.query(`
-        UPDATE codigos_personalizados 
-        SET activo = false, actualizado_en = NOW()
+        UPDATE codigos_personalizados SET activo = false, actualizado_en = NOW()
         WHERE id = $1 AND grupo_familiar_id = $2
       `, [codigoId, grupoId]);
     }
@@ -883,16 +668,12 @@ export const eliminarCodigoPersonalizado = async (usuarioId, codigoId) => {
   }
 };
 
-// ==================== FUNCIONES DE CREACIÓN Y UNIÓN A GRUPO ====================
+// ==================== CREAR Y UNIRSE A GRUPO ====================
 
-/**
- * 11. Crear un nuevo grupo familiar (usuario se convierte en admin)
- */
 export const crearGrupoFamiliar = async (usuarioId, nombreGrupo = 'Mi Familia') => {
   let client;
   try {
     client = await pool.connect();
-
     const checkGrupo = await client.query(`
       SELECT 1 FROM usuario_grupo WHERE usuario_id = $1 AND estado = 'activo'
     `, [usuarioId]);
@@ -907,10 +688,7 @@ export const crearGrupoFamiliar = async (usuarioId, nombreGrupo = 'Mi Familia') 
     while (!codigoUnico && intentos < 10) {
       codigo = '';
       for (let i = 0; i < 5; i++) codigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
-      const codigoCheck = await client.query(
-        'SELECT id FROM grupos_familiares WHERE codigo_familiar = $1',
-        [codigo]
-      );
+      const codigoCheck = await client.query('SELECT id FROM grupos_familiares WHERE codigo_familiar = $1', [codigo]);
       if (codigoCheck.rows.length === 0) codigoUnico = true;
       intentos++;
     }
@@ -919,7 +697,8 @@ export const crearGrupoFamiliar = async (usuarioId, nombreGrupo = 'Mi Familia') 
     }
 
     const grupoResult = await client.query(`
-      INSERT INTO grupos_familiares (codigo_familiar, nombre_grupo, usuario_admin_id, activo, fecha_creacion, fecha_expiracion, max_integrantes)
+      INSERT INTO grupos_familiares (codigo_familiar, nombre_grupo, usuario_admin_id, activo,
+                                     fecha_creacion, fecha_expiracion, max_integrantes)
       VALUES ($1, $2, $3, true, NOW(), NOW() + INTERVAL '30 days', 10)
       RETURNING id, codigo_familiar, nombre_grupo
     `, [codigo, nombreGrupo, usuarioId]);
@@ -943,9 +722,6 @@ export const crearGrupoFamiliar = async (usuarioId, nombreGrupo = 'Mi Familia') 
   }
 };
 
-/**
- * 12. Unirse a un grupo familiar existente
- */
 export const unirseAGrupoFamiliar = async (usuarioId, codigoFamiliar) => {
   let client;
   try {
@@ -959,7 +735,6 @@ export const unirseAGrupoFamiliar = async (usuarioId, codigoFamiliar) => {
     }
 
     const codigoLimpio = codigoFamiliar.replace(/-/g, '').toUpperCase();
-
     const grupoResult = await client.query(`
       SELECT id, nombre_grupo, max_integrantes
       FROM grupos_familiares
@@ -969,7 +744,6 @@ export const unirseAGrupoFamiliar = async (usuarioId, codigoFamiliar) => {
     if (grupoResult.rows.length === 0) {
       return { exito: false, error: 'Código familiar inválido o expirado', codigo: 'CODIGO_INVALIDO' };
     }
-
     const grupo = grupoResult.rows[0];
     const grupoId = grupo.id;
 
@@ -982,10 +756,7 @@ export const unirseAGrupoFamiliar = async (usuarioId, codigoFamiliar) => {
     }
 
     // Determinar rol_en_grupo según el rol del usuario
-    const usuarioRolResult = await client.query(
-      'SELECT rol FROM usuarios WHERE id = $1',
-      [usuarioId]
-    );
+    const usuarioRolResult = await client.query('SELECT rol FROM usuarios WHERE id = $1', [usuarioId]);
     const usuarioRol = usuarioRolResult.rows[0]?.rol || 'familiar';
     const rolEnGrupo = (usuarioRol === 'familiar_admin' || usuarioRol === 'familiar_administrador') ? 'admin' : 'familiar';
 
@@ -1009,32 +780,22 @@ export const unirseAGrupoFamiliar = async (usuarioId, codigoFamiliar) => {
   }
 };
 
-// ==================== FUNCIONES DE ADULTO MAYOR ====================
+// ==================== ADULTO MAYOR ====================
 
-/**
- * 13. Crear/Actualizar información del adulto mayor del grupo
- * ✅ Usa asignarAdultoMayorDelGrupoAUsuario para todos los miembros
- */
 export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
   let client;
   try {
-    console.log('👴 [FAMILIA] Actualizando adulto mayor para usuario ID:', usuarioId);
     client = await pool.connect();
 
     const grupoQuery = `
-      SELECT gf.id 
-      FROM usuario_grupo ug
-      JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
-      WHERE ug.usuario_id = $1 
-        AND ug.rol_en_grupo IN ('admin', 'responsable')
-        AND ug.estado = 'activo'
-        AND gf.activo = true
+      SELECT gf.id FROM usuario_grupo ug JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
+      WHERE ug.usuario_id = $1 AND ug.rol_en_grupo IN ('admin', 'responsable')
+        AND ug.estado = 'activo' AND gf.activo = true
     `;
     const grupoResult = await client.query(grupoQuery, [usuarioId]);
     if (grupoResult.rows.length === 0) {
       return { exito: false, error: 'No tienes permisos para gestionar el adulto mayor', codigo: 'SIN_PERMISOS' };
     }
-
     const grupoId = grupoResult.rows[0].id;
 
     const {
@@ -1053,16 +814,14 @@ export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
     `, [grupoId]);
 
     let resultado;
-
     if (existeAdultoMayor.rows.length > 0) {
       const updateQuery = `
-        UPDATE adultos_mayores 
-        SET nombre = $1, fecha_nacimiento = $2, genero = $3,
-            estado_salud = $4, medico_principal = $5, telefono_emergencia = $6,
-            alergias = $7, medicamentos_cronicos = $8,
-            contacto_emergencia_nombre = $9, contacto_emergencia_telefono = $10,
-            direccion = $11, notas_medicas = $12,
-            actualizado_en = NOW()
+        UPDATE adultos_mayores SET nombre = $1, fecha_nacimiento = $2, genero = $3,
+          estado_salud = $4, medico_principal = $5, telefono_emergencia = $6,
+          alergias = $7, medicamentos_cronicos = $8,
+          contacto_emergencia_nombre = $9, contacto_emergencia_telefono = $10,
+          direccion = $11, notas_medicas = $12,
+          actualizado_en = NOW()
         WHERE grupo_familiar_id = $13
         RETURNING *
       `;
@@ -1075,13 +834,12 @@ export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
       ]);
     } else {
       const insertQuery = `
-        INSERT INTO adultos_mayores (
-          grupo_familiar_id, nombre, fecha_nacimiento, genero,
+        INSERT INTO adultos_mayores (grupo_familiar_id, nombre, fecha_nacimiento, genero,
           estado_salud, medico_principal, telefono_emergencia,
           alergias, medicamentos_cronicos,
           contacto_emergencia_nombre, contacto_emergencia_telefono,
-          direccion, notas_medicas, creado_en, actualizado_en
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+          direccion, notas_medicas, creado_en, actualizado_en)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
         RETURNING *
       `;
       resultado = await client.query(insertQuery, [
@@ -1097,8 +855,7 @@ export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
 
     // Asignar adulto mayor a todos los miembros activos del grupo
     const miembrosQuery = `
-      SELECT usuario_id FROM usuario_grupo
-      WHERE grupo_familiar_id = $1 AND estado = 'activo'
+      SELECT usuario_id FROM usuario_grupo WHERE grupo_familiar_id = $1 AND estado = 'activo'
     `;
     const miembrosResult = await client.query(miembrosQuery, [grupoId]);
 
@@ -1106,8 +863,6 @@ export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
       await asignarAdultoMayorDelGrupoAUsuario(grupoId, miembro.usuario_id);
     }
     await asignarAdultoMayorDelGrupoAUsuario(grupoId, usuarioId);
-
-    console.log(`✅ Adulto mayor ID ${adulto_mayor_id} asignado a ${miembrosResult.rows.length} miembros`);
 
     return {
       exito: true,
@@ -1124,25 +879,17 @@ export const actualizarAdultoMayor = async (usuarioId, datosAdultoMayor) => {
   }
 };
 
-/**
- * 14. Obtener información del adulto mayor del grupo
- */
 export const obtenerAdultoMayor = async (usuarioId) => {
   let client;
   try {
-    console.log('👴 [FAMILIA] Obteniendo adulto mayor para usuario:', usuarioId);
     client = await pool.connect();
-
     const grupoQuery = `
-      SELECT ug.grupo_familiar_id 
-      FROM usuario_grupo ug
-      WHERE ug.usuario_id = $1 AND ug.estado = 'activo'
+      SELECT ug.grupo_familiar_id FROM usuario_grupo ug WHERE ug.usuario_id = $1 AND ug.estado = 'activo'
     `;
     const grupoResult = await client.query(grupoQuery, [usuarioId]);
     if (grupoResult.rows.length === 0) {
       return { exito: false, error: 'No perteneces a ningún grupo familiar', codigo: 'SIN_GRUPO' };
     }
-
     const grupoId = grupoResult.rows[0].grupo_familiar_id;
 
     const adultoMayorQuery = `
@@ -1150,16 +897,12 @@ export const obtenerAdultoMayor = async (usuarioId) => {
              medico_principal, telefono_emergencia, alergias, medicamentos_cronicos,
              contacto_emergencia_nombre, contacto_emergencia_telefono,
              direccion, notas_medicas, creado_en, actualizado_en
-      FROM adultos_mayores
-      WHERE grupo_familiar_id = $1
-      LIMIT 1
+      FROM adultos_mayores WHERE grupo_familiar_id = $1 LIMIT 1
     `;
     const adultoMayorResult = await client.query(adultoMayorQuery, [grupoId]);
-
     if (adultoMayorResult.rows.length === 0) {
       return { exito: false, error: 'No hay adulto mayor registrado en el grupo', codigo: 'NO_ADULTO_MAYOR' };
     }
-
     return { exito: true, adulto_mayor: adultoMayorResult.rows[0], mensaje: 'Información del adulto mayor obtenida exitosamente' };
   } catch (error) {
     console.error('❌ Error en obtenerAdultoMayor:', error.message);
@@ -1169,12 +912,8 @@ export const obtenerAdultoMayor = async (usuarioId) => {
   }
 };
 
-/**
- * Asigna el adulto mayor principal del grupo al usuario especificado en la tabla familiares.
- * Si el usuario ya tiene un adulto mayor activo en el grupo, no hace nada.
- * Si el grupo no tiene adulto mayor, no hace nada.
- * Si tiene un registro inactivo, lo reactiva.
- */
+// ==================== FUNCIÓN CENTRAL DE ASIGNACIÓN ====================
+
 export const asignarAdultoMayorDelGrupoAUsuario = async (grupo_familiar_id, usuario_id) => {
   let client;
   try {
@@ -1184,8 +923,7 @@ export const asignarAdultoMayorDelGrupoAUsuario = async (grupo_familiar_id, usua
     const adultoQuery = `
       SELECT id FROM adultos_mayores
       WHERE grupo_familiar_id = $1 AND activo = true
-      ORDER BY creado_en ASC
-      LIMIT 1
+      ORDER BY creado_en ASC LIMIT 1
     `;
     const adultoResult = await client.query(adultoQuery, [grupo_familiar_id]);
     if (adultoResult.rows.length === 0) {
@@ -1207,9 +945,9 @@ export const asignarAdultoMayorDelGrupoAUsuario = async (grupo_familiar_id, usua
         console.log(`Usuario ${usuario_id} ya tiene adulto mayor activo en grupo ${grupo_familiar_id}`);
         return;
       } else {
+        // Reactivar
         await client.query(`
-          UPDATE familiares SET activo = true, actualizado_en = NOW()
-          WHERE id = $1
+          UPDATE familiares SET activo = true, actualizado_en = NOW() WHERE id = $1
         `, [registro.id]);
         console.log(`✅ Registro inactivo reactivado para usuario ${usuario_id}`);
         return;
@@ -1231,37 +969,27 @@ export const asignarAdultoMayorDelGrupoAUsuario = async (grupo_familiar_id, usua
   }
 };
 
-// ==================== ELIMINAR GRUPO FAMILIAR (SOFT DELETE) ====================
+// ==================== ELIMINAR GRUPO FAMILIAR ====================
 
-/**
- * Eliminar grupo familiar y todos sus datos asociados (soft delete en cascada)
- */
 export const eliminarGrupoFamiliar = async (usuarioId) => {
   let client;
   try {
-    console.log(`🗑️ [FAMILIA] Eliminando grupo familiar por usuario: ${usuarioId}`);
     client = await pool.connect();
 
-    // Verificar que el usuario es administrador del grupo
     const adminCheck = await client.query(`
       SELECT gf.id, gf.nombre_grupo, ug.rol_en_grupo, u.rol as rol_usuario
-      FROM usuario_grupo ug
-      JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
+      FROM usuario_grupo ug JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
       JOIN usuarios u ON ug.usuario_id = u.id
-      WHERE ug.usuario_id = $1 
-        AND ug.estado = 'activo' 
-        AND gf.activo = true
+      WHERE ug.usuario_id = $1 AND ug.estado = 'activo' AND gf.activo = true
     `, [usuarioId]);
 
     if (adminCheck.rows.length === 0) {
       return { exito: false, error: 'No eres administrador o no hay un grupo activo', codigo: 'NO_ADMIN_O_GRUPO_INACTIVO' };
     }
-
     const admin = adminCheck.rows[0];
     const esAdmin = admin.rol_en_grupo === 'admin' ||
       admin.rol_usuario === 'familiar_admin' ||
       admin.rol_usuario === 'familiar_administrador';
-
     if (!esAdmin) {
       return { exito: false, error: 'No tienes permisos para eliminar el grupo', codigo: 'SIN_PERMISOS' };
     }
@@ -1318,28 +1046,22 @@ export const eliminarGrupoFamiliar = async (usuarioId) => {
       }
 
       await client.query(`
-        UPDATE codigos_personalizados SET activo = false, actualizado_en = NOW() 
-        WHERE grupo_familiar_id = $1
+        UPDATE codigos_personalizados SET activo = false, actualizado_en = NOW() WHERE grupo_familiar_id = $1
       `, [grupoId]);
 
       await client.query(`
-        UPDATE usuario_grupo SET estado = 'inactivo', actualizado_en = NOW() 
-        WHERE grupo_familiar_id = $1
+        UPDATE usuario_grupo SET estado = 'inactivo', actualizado_en = NOW() WHERE grupo_familiar_id = $1
       `, [grupoId]);
 
       await client.query(`
-        UPDATE notificaciones SET leida = true 
-        WHERE usuario_id IN (SELECT usuario_id FROM usuario_grupo WHERE grupo_familiar_id = $1)
+        UPDATE notificaciones SET leida = true WHERE usuario_id IN (SELECT usuario_id FROM usuario_grupo WHERE grupo_familiar_id = $1)
       `, [grupoId]);
 
       await client.query(`
-        UPDATE grupos_familiares SET activo = false, actualizado_en = NOW() 
-        WHERE id = $1
+        UPDATE grupos_familiares SET activo = false, actualizado_en = NOW() WHERE id = $1
       `, [grupoId]);
 
       await client.query('COMMIT');
-
-      console.log(`✅ Grupo familiar "${nombreGrupo}" (ID: ${grupoId}) eliminado con todos sus datos asociados.`);
 
       return {
         exito: true,
@@ -1349,7 +1071,6 @@ export const eliminarGrupoFamiliar = async (usuarioId) => {
       };
     } catch (error) {
       await client.query('ROLLBACK');
-      console.error('❌ Error en transacción de eliminación:', error.message);
       throw error;
     }
   } catch (error) {
@@ -1360,26 +1081,17 @@ export const eliminarGrupoFamiliar = async (usuarioId) => {
   }
 };
 
-/**
- * Salir del grupo familiar (para cualquier miembro)
- */
 export const salirDelGrupoFamiliar = async (usuarioId) => {
   let client;
   try {
-    console.log(`🚪 [FAMILIA] Usuario ${usuarioId} intenta salir del grupo`);
     client = await pool.connect();
 
     const grupoQuery = `
-      SELECT 
-        ug.grupo_familiar_id,
-        ug.rol_en_grupo,
-        u.rol as rol_usuario,
-        gf.id as grupo_id,
-        gf.nombre_grupo,
-        (SELECT COUNT(*) FROM usuario_grupo WHERE grupo_familiar_id = ug.grupo_familiar_id AND estado = 'activo') as total_miembros,
-        (SELECT COUNT(*) FROM usuario_grupo WHERE grupo_familiar_id = ug.grupo_familiar_id AND estado = 'activo' AND rol_en_grupo = 'admin') as total_admins
-      FROM usuario_grupo ug
-      JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
+      SELECT ug.grupo_familiar_id, ug.rol_en_grupo, u.rol as rol_usuario,
+             gf.id as grupo_id, gf.nombre_grupo,
+             (SELECT COUNT(*) FROM usuario_grupo WHERE grupo_familiar_id = ug.grupo_familiar_id AND estado = 'activo') as total_miembros,
+             (SELECT COUNT(*) FROM usuario_grupo WHERE grupo_familiar_id = ug.grupo_familiar_id AND estado = 'activo' AND rol_en_grupo = 'admin') as total_admins
+      FROM usuario_grupo ug JOIN grupos_familiares gf ON ug.grupo_familiar_id = gf.id
       JOIN usuarios u ON ug.usuario_id = u.id
       WHERE ug.usuario_id = $1 AND ug.estado = 'activo' AND gf.activo = true
     `;
@@ -1401,15 +1113,13 @@ export const salirDelGrupoFamiliar = async (usuarioId) => {
 
     // Si es el único administrador y el único miembro → eliminar grupo
     if (esAdmin && totalAdmins === 1 && totalMiembros === 1) {
-      console.log('🗑️ Usuario es el único admin y único miembro, eliminando grupo...');
       return await eliminarGrupoFamiliar(usuarioId);
     }
 
     // Si es administrador pero hay otros administradores → desactivar su relación
     if (esAdmin && totalAdmins > 1) {
       await client.query(`
-        UPDATE usuario_grupo
-        SET estado = 'inactivo', actualizado_en = NOW()
+        UPDATE usuario_grupo SET estado = 'inactivo', actualizado_en = NOW()
         WHERE usuario_id = $1 AND grupo_familiar_id = $2
       `, [usuarioId, grupo_familiar_id]);
       return { exito: true, mensaje: 'Has salido del grupo familiar. Ya no eres administrador.', accion: 'salir', grupo_id: grupo_familiar_id };
@@ -1418,8 +1128,7 @@ export const salirDelGrupoFamiliar = async (usuarioId) => {
     // Si es familiar normal → desactivar relación
     if (!esAdmin) {
       await client.query(`
-        UPDATE usuario_grupo
-        SET estado = 'inactivo', actualizado_en = NOW()
+        UPDATE usuario_grupo SET estado = 'inactivo', actualizado_en = NOW()
         WHERE usuario_id = $1 AND grupo_familiar_id = $2
       `, [usuarioId, grupo_familiar_id]);
       return { exito: true, mensaje: 'Has salido del grupo familiar.', accion: 'salir', grupo_id: grupo_familiar_id };
