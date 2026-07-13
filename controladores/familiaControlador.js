@@ -22,6 +22,14 @@ const esAdministradorDelGrupo = async (client, usuarioId, grupoId) => {
   return rol_en_grupo === 'admin' || rol === 'familiar_admin' || rol === 'familiar_administrador';
 };
 
+/**
+ * Obtiene el creador del grupo (usuario_admin_id)
+ */
+const obtenerCreadorGrupo = async (client, grupoId) => {
+  const result = await client.query('SELECT usuario_admin_id FROM grupos_familiares WHERE id = $1', [grupoId]);
+  return result.rows.length > 0 ? result.rows[0].usuario_admin_id : null;
+};
+
 // ==================== FUNCIONES DE GRUPOS FAMILIARES ====================
 
 /**
@@ -112,7 +120,6 @@ export const obtenerGrupoFamiliar = async (usuarioId) => {
 
 /**
  * 2. Obtener código familiar (ACCESIBLE PARA TODOS LOS MIEMBROS DEL GRUPO)
- * ✅ Ahora cualquier miembro del grupo puede ver el código
  */
 export const obtenerCodigoFamiliar = async (usuarioId) => {
   let client;
@@ -148,8 +155,6 @@ export const obtenerCodigoFamiliar = async (usuarioId) => {
  */
 export const regenerarCodigoFamiliar = async (usuarioId) => {
   let client;
-  const fechaExpiracion = new Date();
-  fechaExpiracion.setDate(fechaExpiracion.getDate() + 7);
   try {
     console.log('🔄 [FAMILIA] Regenerando código familiar para usuario:', usuarioId);
     client = await pool.connect();
@@ -210,7 +215,7 @@ export const regenerarCodigoFamiliar = async (usuarioId) => {
       WHERE grupo_familiar_id = $1
     `, [grupo.id]);
 
-    return { exito: true, codigo, fecha_expiracion, mensaje: 'Código familiar regenerado exitosamente' };
+    return { exito: true, codigo, fechaExpiracion, mensaje: 'Código familiar regenerado exitosamente' };
   } catch (error) {
     console.error('❌ Error en regenerarCodigoFamiliar:', error.message);
     return { exito: false, error: 'Error al regenerar código familiar', codigo: 'ERROR_SERVIDOR' };
@@ -427,6 +432,7 @@ export const crearFamiliar = async (adminId, datosFamiliar) => {
 
 /**
  * 6. Actualizar información de un familiar (solo administradores)
+ * - No permite editar a otro administrador a menos que sea el creador del grupo
  */
 export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => {
   let client;
@@ -457,15 +463,32 @@ export const actualizarFamiliar = async (adminId, familiarId, datosFamiliar) => 
 
     const grupoId = permiso.grupo_familiar_id;
 
+    // Verificar que el familiar pertenece al mismo grupo
     const familiarCheck = await client.query(`
-      SELECT ug.id FROM usuario_grupo ug
+      SELECT ug.id, ug.rol_en_grupo, u.rol as rol_usuario
+      FROM usuario_grupo ug
+      JOIN usuarios u ON ug.usuario_id = u.id
       WHERE ug.usuario_id = $1 AND ug.grupo_familiar_id = $2
     `, [familiarId, grupoId]);
+
     if (familiarCheck.rows.length === 0) {
       return { exito: false, error: 'El familiar no pertenece a tu grupo familiar', codigo: 'FAMILIAR_NO_ENCONTRADO' };
     }
 
-    // Preparar actualización
+    const familiar = familiarCheck.rows[0];
+    const esFamiliarAdmin = familiar.rol_en_grupo === 'admin' ||
+      familiar.rol_usuario === 'familiar_admin' ||
+      familiar.rol_usuario === 'familiar_administrador';
+
+    // Si el familiar es administrador, solo el creador del grupo puede editarlo
+    if (esFamiliarAdmin) {
+      const creadorId = await obtenerCreadorGrupo(client, grupoId);
+      if (adminId !== creadorId) {
+        return { exito: false, error: 'No puedes editar a otro administrador. Solo el creador del grupo puede hacerlo.', codigo: 'NO_PERMISO_EDITAR_ADMIN' };
+      }
+    }
+
+    // Preparar actualización (igual que antes)
     const valores = [];
     const partesQuery = [];
     let contador = 1;
@@ -589,13 +612,7 @@ export const eliminarFamiliar = async (adminId, familiarId) => {
 
     // Si el familiar es administrador, solo el creador puede eliminarlo
     if (familiarData.rol_en_grupo === 'admin') {
-      const creadorCheck = await client.query(`
-        SELECT usuario_admin_id FROM grupos_familiares WHERE id = $1
-      `, [grupoId]);
-      if (creadorCheck.rows.length === 0) {
-        return { exito: false, error: 'Grupo no encontrado', codigo: 'GRUPO_NO_ENCONTRADO' };
-      }
-      const creadorId = creadorCheck.rows[0].usuario_admin_id;
+      const creadorId = await obtenerCreadorGrupo(client, grupoId);
       if (adminId !== creadorId) {
         return { exito: false, error: 'No puedes eliminar a otro administrador. Solo el creador del grupo puede hacerlo.', codigo: 'NO_PERMISO_ELIMINAR_ADMIN' };
       }
@@ -632,6 +649,7 @@ export const eliminarFamiliar = async (adminId, familiarId) => {
 
 /**
  * 8. Obtener códigos personalizados del grupo (solo administradores)
+ * Incluye usuario_asignado para relacionar con miembros
  */
 export const obtenerCodigosPersonalizados = async (usuarioId) => {
   let client;
@@ -670,10 +688,11 @@ export const obtenerCodigosPersonalizados = async (usuarioId) => {
         cp.id, cp.codigo, cp.nombre, cp.apellido, cp.parentesco,
         cp.rol_asignado, cp.descripcion, cp.max_usos, cp.usos_actuales,
         cp.fecha_expiracion, cp.activo, cp.creado_en, cp.actualizado_en,
+        cp.usuario_asignado,
         u_creador.nombre as creador_nombre,
         CASE 
           WHEN cp.activo = false THEN 'inactivo'
-          WHEN cp.usos_actuales > 0 THEN 'en uso'
+          WHEN cp.usos_actuales > 0 OR cp.usuario_asignado IS NOT NULL THEN 'en uso'
           WHEN cp.max_usos IS NOT NULL AND cp.usos_actuales >= cp.max_usos THEN 'en uso'
           ELSE 'pendiente'
         END as estado
@@ -833,17 +852,21 @@ export const eliminarCodigoPersonalizado = async (usuarioId, codigoId) => {
       return { exito: false, error: 'Código no encontrado en tu grupo', codigo: 'CODIGO_NO_ENCONTRADO' };
     }
 
+    // Desvincular el código de cualquier usuario
     await client.query(`
-      UPDATE usuarios SET codigo_personalizado_id = NULL 
-      WHERE codigo_personalizado_id = $1
+      UPDATE codigos_personalizados 
+      SET usuario_asignado = NULL 
+      WHERE id = $1
     `, [codigoId]);
 
+    // Intentar eliminar el código (solo si no se ha usado)
     const deleteResult = await client.query(`
       DELETE FROM codigos_personalizados 
-      WHERE id = $1 AND grupo_familiar_id = $2 AND usos_actuales = 0
+      WHERE id = $1 AND grupo_familiar_id = $2 AND usos_actuales = 0 AND usuario_asignado IS NULL
     `, [codigoId, grupoId]);
 
     if (deleteResult.rowCount === 0) {
+      // Si ya fue usado, desactivarlo
       await client.query(`
         UPDATE codigos_personalizados 
         SET activo = false, actualizado_en = NOW()
@@ -1415,7 +1438,7 @@ export const salirDelGrupoFamiliar = async (usuarioId) => {
 
 export default {
   obtenerGrupoFamiliar,
-  obtenerCodigoFamiliar,   // ✅ Ahora accesible para todos
+  obtenerCodigoFamiliar,
   regenerarCodigoFamiliar,
   obtenerFamiliares,
   crearFamiliar,
