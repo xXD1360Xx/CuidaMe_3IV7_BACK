@@ -21,8 +21,7 @@ const esAdministradorDelGrupo = async (client, usuarioId, grupoId) => {
   const { rol_en_grupo, rol } = result.rows[0];
   return rol_en_grupo === 'admin' || rol === 'familiar_admin' || rol === 'familiar_administrador';
 };
-const fechaExpiracion = new Date();
-fechaExpiracion.setDate(fechaExpiracion.getDate() + 7);
+
 // ==================== FUNCIONES DE GRUPOS FAMILIARES ====================
 
 /**
@@ -149,6 +148,8 @@ export const obtenerCodigoFamiliar = async (usuarioId) => {
  */
 export const regenerarCodigoFamiliar = async (usuarioId) => {
   let client;
+  const fechaExpiracion = new Date();
+  fechaExpiracion.setDate(fechaExpiracion.getDate() + 7);
   try {
     console.log('🔄 [FAMILIA] Regenerando código familiar para usuario:', usuarioId);
     client = await pool.connect();
